@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Colchester Well Risk Map</title>
+    <!-- Load Leaflet CSS and JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/SJPbAitS+Y/Rz7jzmQ="
+        crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20n64z7k6nqqd/I9FJ52Ecd3wKz5S/2lI2U8qgC85Tz4="
+        crossorigin=""></script>
+    <!-- Load Tailwind CSS for utility styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem;
+        }
+        #map {
+            height: 80vh; /* Map takes 80% of viewport height */
+            width: 95%;
+            max-width: 1200px;
+            margin-top: 1rem;
+            border: 2px solid #ccc;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .info-card {
+            background-color: white;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            max-width: 1200px;
+            width: 95%;
+        }
+
+        /* Custom marker colors based on risk */
+        .leaflet-marker-icon.risk-low { border: 2px solid #047857; background-color: #34d399; } /* Emerald */
+        .leaflet-marker-icon.risk-moderate { border: 2px solid #b45309; background-color: #f59e0b; } /* Amber */
+        .leaflet-marker-icon.risk-high { border: 2px solid #b91c1c; background-color: #ef4444; } /* Red */
+        .leaflet-marker-icon.risk-unknown { border: 2px solid #475569; background-color: #94a3b8; } /* Slate */
+
+        /* Leaflet custom marker style for better visibility */
+        .leaflet-marker-icon {
+            width: 15px !important;
+            height: 15px !important;
+            border-radius: 50%;
+            opacity: 0.85;
+            transition: transform 0.1s;
+        }
+        .leaflet-marker-icon:hover {
+            opacity: 1;
+            transform: scale(1.3);
+            z-index: 1000;
+        }
+
+        /* Custom Legend Styling */
+        .legend {
+            line-height: 18px;
+            color: #555;
+            background: white;
+            padding: 6px 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+        .legend i {
+            width: 10px;
+            height: 10px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.85;
+            border-radius: 50%;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="info-card">
+        <h1 class="text-3xl font-bold text-gray-800">Colchester Well Drying Risk Map</h1>
+        <p class="text-gray-600 mt-2">Visualization of all well locations, color-coded by the drought-stressed risk calculated in the analysis.</p>
+        <p class="text-sm text-red-500 mt-2 font-medium">
+            Note: This map requires the data file `wells_data.json` to be located in the same directory as this HTML file.
+        </p>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        const MAP_CENTER = [45.3833, -63.3833]; // Near Truro, Colchester County, NS
+        const INITIAL_ZOOM = 9;
+
+        // Function to determine marker color based on risk
+        function getMarkerColor(risk) {
+            switch (risk) {
+                case 'High':
+                    return 'risk-high';
+                case 'Moderate':
+                    return 'risk-moderate';
+                case 'Low':
+                    return 'risk-low';
+                default:
+                    return 'risk-unknown'; // For Unknown/No Data
+            }
+        }
+
+        // Initialize Map
+        const map = L.map('map').setView(MAP_CENTER, INITIAL_ZOOM);
+
+        // Add Tile Layer (OpenStreetMap)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+
+        // Define the Icon factory for colored markers
+        function createRiskIcon(risk) {
+            const className = `leaflet-marker-icon ${getMarkerColor(risk)}`;
+            return L.divIcon({ className: className, iconSize: [15, 15] });
+        }
+
+
+        // Load Data and Add Markers
+        fetch('wells_data.json')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to load wells_data.json. Check file path.');
+                }
+                return response.json();
+            })
+            .then(allWellsData => {
+                let validPoints = 0;
+                let wellMarkers = L.layerGroup().addTo(map);
+
+                allWellsData.forEach(well => {
+                    const lat = parseFloat(well.latitude);
+                    const lng = parseFloat(well.longitude);
+                    const risk = well.drying_risk || 'Unknown';
+                    const buffer = well.buffer_m !== undefined ? well.buffer_m.toFixed(2) + ' m' : 'N/A';
+                    const aq_type = well.aquifer_type || 'Unknown';
+
+                    if (isNaN(lat) || isNaN(lng)) {
+                        return; // Skip records with invalid coordinates
+                    }
+                    
+                    validPoints++;
+
+                    // Create popup content
+                    const popupContent = `
+                        <div class="font-sans text-sm p-1">
+                            <h3 class="font-bold text-base mb-1">${well.WELL_ID || 'Unknown Well'}</h3>
+                            <p><strong>Risk:</strong> <span class="font-semibold text-${getMarkerColor(risk).split('-')[1]}-600">${risk}</span></p>
+                            <p><strong>Buffer:</strong> ${buffer}</p>
+                            <p><strong>Aquifer:</strong> ${aq_type}</p>
+                            <p><strong>Location:</strong> ${well.location_display || 'N/A'}</p>
+                        </div>
+                    `;
+
+                    // Add marker to the map
+                    L.marker([lat, lng], { icon: createRiskIcon(risk) })
+                        .bindPopup(popupContent)
+                        .addTo(wellMarkers);
+                });
+
+                console.log(`Successfully mapped ${validPoints} wells with valid coordinates.`);
+
+                // Zoom map to fit all markers if points were added
+                if (validPoints > 0) {
+                    map.fitBounds(wellMarkers.getBounds());
+                } else {
+                    alert("No valid well coordinates (latitude/longitude) found in wells_data.json to map.");
+                }
+                
+                addLegend();
+            })
+            .catch(error => {
+                console.error("Error loading or processing data:", error);
+                alert("Error: Could not load the wells data. Ensure 'wells_data.json' is in the same folder.");
+            });
+            
+        // Function to add a custom legend
+        function addLegend() {
+            const legend = L.control({position: 'bottomright'});
+            const risk_categories = [
+                { label: 'High Risk (Buffer < 1.0m)', color: '#ef4444', css: 'risk-high' },
+                { label: 'Moderate Risk (1.0m - 2.5m)', color: '#f59e0b', css: 'risk-moderate' },
+                { label: 'Low Risk (Buffer > 2.5m)', color: '#34d399', css: 'risk-low' },
+                { label: 'Unknown / No Data', color: '#94a3b8', css: 'risk-unknown' }
+            ];
+
+            legend.onAdd = function (map) {
+                const div = L.DomUtil.create('div', 'info legend');
+                div.innerHTML += '<h4>Drying Risk (Stressed)</h4>';
+                
+                for (let i = 0; i < risk_categories.length; i++) {
+                    const category = risk_categories[i];
+                    div.innerHTML +=
+                        '<i style="background:' + category.color + '" class="' + category.css + '"></i> ' +
+                        category.label + '<br>';
+                }
+                return div;
+            };
+
+            legend.addTo(map);
+        }
+
+    </script>
+
+</body>
+</html>
