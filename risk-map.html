@@ -4,13 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Colchester Well Risk Map</title>
-    <!-- Load Leaflet CSS and JS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/SJPbAitS+Y/Rz7jzmQ="
-        crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20n64z7k6nqqd/I9FJ52Ecd3wKz5S/2lI2U8qgC85Tz4="
-        crossorigin=""></script>
+    <!-- Load Leaflet CSS and JS (Integrity removed to fix browser blocking issue) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
     <!-- Load Tailwind CSS for utility styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -130,6 +127,7 @@
         fetch('wells_data.json')
             .then(response => {
                 if (!response.ok) {
+                    // Check for 404/network errors
                     throw new Error('Failed to load wells_data.json. Check file path.');
                 }
                 return response.json();
@@ -139,6 +137,7 @@
                 let wellMarkers = L.layerGroup().addTo(map);
 
                 allWellsData.forEach(well => {
+                    // ** IMPORTANT: Ensure latitude and longitude columns exist and are correct **
                     const lat = parseFloat(well.latitude);
                     const lng = parseFloat(well.longitude);
                     const risk = well.drying_risk || 'Unknown';
@@ -181,7 +180,11 @@
             })
             .catch(error => {
                 console.error("Error loading or processing data:", error);
-                alert("Error: Could not load the wells data. Ensure 'wells_data.json' is in the same folder.");
+                // Display error on the page if data load fails
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'info-card text-center mt-4 text-red-700 font-semibold';
+                errorDiv.innerHTML = `Map Data Error: ${error.message}. Please ensure 'wells_data.json' exists.`;
+                document.body.insertBefore(errorDiv, document.getElementById('map'));
             });
             
         // Function to add a custom legend
