@@ -1,0 +1,49 @@
+name: Scheduled Drought Risk Analysis
+
+on:
+  # 1. Schedule the job to run every day at 10:00 AM UTC (e.g., 7:00 AM ADT in summer)
+  schedule:
+    # Use cron syntax: minute hour day-of-month month day-of-week
+    - cron: '0 10 * * *'
+  
+  # 2. Allow manual triggering from the GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  run_and_publish:
+    runs-on: ubuntu-latest
+    
+    # Permissions are needed to allow the job to commit files back to the repo
+    permissions:
+      contents: write 
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        # Set Git LFS to pull large files if necessary
+        with:
+          lfs: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install your necessary libraries (adjust this list as needed)
+          pip install pandas numpy geopandas requests openpyxl
+
+      - name: Run Water Table Analysis Script
+        run: python water_table.py
+        
+      - name: Commit and Push Updated Output
+        # This step commits the new HTML and CSV files back to the repository
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          # Only commit the generated output files
+          file_pattern: 'risk_report.html colchester_well_risk_analysis.csv wells_data.json'
+          commit_message: '🤖 Automated: Update drought risk analysis report'
+          # Force LFS to track the large HTML file during commit
+          lfs: true

@@ -493,18 +493,28 @@ print("Generating HTML dashboard...")
 # Prepare the main table for client-side rendering
 all_wells_display = results.copy()
 if 'google_maps_link' in all_wells_display.columns:
+    # ... (code to create 'Map Link' and define display_cols remains the same) ...
     all_wells_display['Map Link'] = all_wells_display['google_maps_link'].apply(
         lambda x: f'<a href="{x}" target="_blank" class="map-link">📍 Map</a>' if x else '—'
     )
     # Define columns for the final table, removing originals used for the map link
-    # The old 'current_water_level_m' must be dropped as it was renamed
-    drop_cols = ['google_maps_link', 'CIVIC_ADDRESS', 'MUNICIPALITY', 'latitude', 'longitude', 'current_water_level_m'] # <--- PATCH: UPDATED
+    drop_cols = ['google_maps_link', 'CIVIC_ADDRESS', 'MUNICIPALITY', 'latitude', 'longitude']
     
     # --- THIS IS THE CORRECTED LINE from the previous request ---
     display_cols = ['WELL_ID', 'location_display', 'Map Link'] + [c for c in all_wells_display.columns if c not in drop_cols + ['WELL_ID', 'location_display', 'Map Link']]
     
     all_wells_display = all_wells_display[display_cols]
 
+# *** Convert the full dataset to JSON ***
+all_wells_json = all_wells_display.to_json(orient="records")
+# *** Create the column definitions for DataTables ***
+datatables_columns = json.dumps([{"data": col, "title": col} for col in all_wells_display.columns])
+
+# ** PATCH: Save the data payload separately to keep the HTML file small **
+data_json_file = "wells_data.json"
+with open(data_json_file, "w", encoding="utf-8") as f:
+    f.write(all_wells_json)
+print(f"Data payload saved separately to {data_json_file}")
 # *** Convert the full dataset to JSON for DataTables ***
 all_wells_json = all_wells_display.to_json(orient="records")
 # *** Create the column definitions for DataTables ***
@@ -657,26 +667,44 @@ html_parts.append("</div>")
 html_parts.append("</div>") # end tab-content
 html_parts.append("</div>") # end container
 
-# Inject data as a JavaScript variable
-html_parts.append(f"<script> const allWellsData = {all_wells_json}; const dtColumns = {datatables_columns}; </script>")
 
+# Inject column definitions (small) and define the data file path
+html_parts.append(f"<script> const dtColumns = {datatables_columns}; const dataJsonFile = '{data_json_file}';</script>")
+
+# Updated DataTables initialization script
 # Updated DataTables initialization script
 html_parts.append("""
 <script>
 $(document).ready(function() {
-  // Initialize the large table from JSON data
-  $('#all_wells_table').DataTable({
-    data: allWellsData,
-    columns: dtColumns,
-    pageLength: 25,
-    lengthMenu: [10, 25, 50, 100, {label: "All", value: -1}],
-    dom: 'Bfrtip',
-    buttons: ['copy', 'csv', 'excel', 'print'],
-    scrollX: true,
-    responsive: true
-  });
+  // Use Fetch API to load the data payload separately
+  fetch(dataJsonFile)
+    .then(response => {
+        if (!response.ok) {
+            // Handle HTTP errors (e.g., 404)
+            throw new Error('Failed to load data: ' + response.statusText);
+        }
+        return response.json();
+    })
+    .then(allWellsData => {
+        // Initialize the large table from JSON data after fetching
+        $('#all_wells_table').DataTable({
+            data: allWellsData,
+            columns: dtColumns,
+            pageLength: 25,
+            lengthMenu: [10, 25, 50, 100, {label: "All", value: -1}],
+            dom: 'Bfrtip',
+            buttons: ['copy', 'csv', 'excel', 'print'],
+            scrollX: true,
+            responsive: true
+        });
+    })
+    .catch(error => {
+        console.error("Error initializing dashboard:", error);
+        // Display an error message to the user if the data fails to load
+        $('#all_wells_table').html("<p style='color:red;'>Error: Could not load well data. Ensure 'wells_data.json' is present alongside the HTML report.</p>");
+    });
 
-  // Initialize the smaller, pre-rendered tables
+  // Initialize the smaller, pre-rendered tables (they don't use the large allWellsData payload)
   $('#top20_table, #risk_table, #aq_table').DataTable({
     pageLength: 20,
     dom: 'Bfrtip',
