@@ -141,7 +141,10 @@
                     const lat = parseFloat(well.latitude);
                     const lng = parseFloat(well.longitude);
                     const risk = well.drying_risk || 'Unknown';
-                    const buffer = well.buffer_m !== undefined ? well.buffer_m.toFixed(2) + ' m' : 'N/A';
+                    
+                    // FIX: Use != null to check for both null and undefined before calling toFixed()
+                    const buffer = well.buffer_m != null ? well.buffer_m.toFixed(2) + ' m' : 'N/A';
+                    
                     const aq_type = well.aquifer_type || 'Unknown';
 
                     if (isNaN(lat) || isNaN(lng)) {
@@ -173,7 +176,11 @@
                 if (validPoints > 0) {
                     map.fitBounds(wellMarkers.getBounds());
                 } else {
-                    alert("No valid well coordinates (latitude/longitude) found in wells_data.json to map.");
+                    // Replaced alert() with displaying the message on the page
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'info-card text-center mt-4 text-orange-700 font-semibold';
+                    errorDiv.innerHTML = "Warning: No valid well coordinates found in wells_data.json to map.";
+                    document.body.insertBefore(errorDiv, document.getElementById('map'));
                 }
                 
                 addLegend();
