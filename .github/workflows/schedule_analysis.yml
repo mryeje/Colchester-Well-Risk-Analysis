@@ -46,4 +46,5 @@ jobs:
           file_pattern: 'risk_report.html colchester_well_risk_analysis.csv wells_data.json'
           commit_message: '🤖 Automated: Update drought risk analysis report'
           # Force LFS to track the large HTML file during commit
+          add_options: '-f' 
           lfs: true
