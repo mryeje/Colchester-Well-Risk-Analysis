@@ -22,7 +22,7 @@ obs_file = "obs_well_timeseries.csv"
 bedrock_shp = "h428nsgb.shp"
 surficial_shp = "h428nsgs.shp"
 output_csv = "colchester_well_risk_analysis.csv"
-output_html = "risk_report.html"
+output_html = "index.html"
 
 # If your UTM zone is different, change this. EPSG:26920 is NAD83 / UTM zone 20N (Nova Scotia).
 utm_crs = "EPSG:26920"
