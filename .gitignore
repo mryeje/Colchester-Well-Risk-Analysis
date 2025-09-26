@@ -1,0 +1,4 @@
+# Ignore large generated output files
+risk_report.html
+colchester_well_risk_analysis.csv
+wells_data.json
