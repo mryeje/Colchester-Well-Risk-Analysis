@@ -137,19 +137,33 @@
                 let wellMarkers = L.layerGroup().addTo(map);
 
                 allWellsData.forEach(well => {
-                    // ** IMPORTANT: Ensure latitude and longitude columns exist and are correct **
-                    const lat = parseFloat(well.latitude);
-                    const lng = parseFloat(well.longitude);
+                    
+                    // --- FIX FOR COORDINATE VALIDATION ---
+                    // Retrieve raw values
+                    const rawLat = well.latitude;
+                    const rawLng = well.longitude;
+                    
+                    // Check if values are null, undefined, or empty strings first
+                    if (!rawLat || !rawLng) {
+                        return; // Skip if coordinates are missing or empty
+                    }
+
+                    // Attempt to parse to number
+                    const lat = parseFloat(rawLat);
+                    const lng = parseFloat(rawLng);
+                    
+                    // Check if parsing failed
+                    if (isNaN(lat) || isNaN(lng)) {
+                        return; // Skip if parsing resulted in NaN
+                    }
+                    // ------------------------------------
+
                     const risk = well.drying_risk || 'Unknown';
                     
-                    // FIX: Use != null to check for both null and undefined before calling toFixed()
+                    // This handles 'null' buffer values correctly
                     const buffer = well.buffer_m != null ? well.buffer_m.toFixed(2) + ' m' : 'N/A';
                     
                     const aq_type = well.aquifer_type || 'Unknown';
-
-                    if (isNaN(lat) || isNaN(lng)) {
-                        return; // Skip records with invalid coordinates
-                    }
                     
                     validPoints++;
 
@@ -176,10 +190,10 @@
                 if (validPoints > 0) {
                     map.fitBounds(wellMarkers.getBounds());
                 } else {
-                    // Replaced alert() with displaying the message on the page
+                    // Display the warning message on the page
                     const errorDiv = document.createElement('div');
                     errorDiv.className = 'info-card text-center mt-4 text-orange-700 font-semibold';
-                    errorDiv.innerHTML = "Warning: No valid well coordinates found in wells_data.json to map.";
+                    errorDiv.innerHTML = "Warning: No valid well coordinates found in wells_data.json to map. Check the 'latitude' and 'longitude' fields in your data.";
                     document.body.insertBefore(errorDiv, document.getElementById('map'));
                 }
                 
