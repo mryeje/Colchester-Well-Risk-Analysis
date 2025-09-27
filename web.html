@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang='en'><head><meta charset='utf-8'><title>Colchester Well Drying Risk Report</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+<style>
+body { background:#f8fafc; color:#111; }
+h1,h2 { color:#0b4d78; margin-top:20px; }
+.card { border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,0.08); margin-bottom:20px; }
+.kpi-card { text-align:center; padding:20px; }
+.kpi-value { font-size:1.5rem; font-weight:bold; color:#0b4d78; }
+.nav-tabs .nav-link.active { background:#0b4d78; color:#fff; }
+.map-link { color:#0b4d78; text-decoration:none; }
+.map-link:hover { text-decoration:underline; }
+.dataTables_wrapper .dt-buttons { margin-bottom:10px; }
+table.dataTable thead th { white-space: nowrap; }
+/* --- NEW CSS FOR HELP WINDOW --- */
+#help-window .card-body { font-size: 0.9rem; }
+#help-window .card-body ul { padding-left: 20px; }
+</style>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</head><body>
+<div class="container-fluid py-4">
+
+<h1 class='mb-3'>Colchester County Well Drying Risk Dashboard</h1>
+<p class='text-muted'>Report generated: 2025-09-27 00:50</p>
+
+<p>
+  <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#help-window" aria-expanded="false" aria-controls="help-window">
+    How to Read This Report 📖
+  </button>
+</p>
+<div class="collapse" id="help-window">
+  <div class="card card-body bg-light mb-4">
+    <h4>Understanding the Columns</h4>
+    <p>This report analyzes the risk of private wells running dry based on their construction and water levels.</p>
+    <ul>
+        <li><strong>buffer_m (Buffer in Meters):</strong> This is the most important column. It shows the vertical distance between the current water level and the estimated pump depth. A small or negative number indicates a high risk of the pump drawing air.</li>
+        <li><strong>drying_risk:</strong> A risk category assigned based on the <strong>buffer_m</strong> value:
+            <ul>
+                <li><strong>CRITICAL:</strong> Buffer is negative. The water level is likely below the pump.</li>
+                <li><strong>High risk:</strong> Buffer is less than 2 meters.</li>
+                <li><strong>Moderate risk:</strong> Buffer is between 2 and 5 meters.</li>
+                <li><strong>Low risk:</strong> Buffer is greater than 5 meters.</li>
+            </ul>
+        </li>
+        <li><strong>stressed_water_level_m:</strong> The estimated depth to the water from the ground surface, in meters, **adjusted for potential drought conditions** based on Environment Canada hydrometric data. A larger number means the water is deeper down.</li>
+        <li><strong>current_water_level_m_observed:</strong> The original depth to water (static level or latest observation well reading).</li>
+        <li><strong>drought_drawdown_m:</strong> The amount of additional drawdown (in meters) applied to the water level to stress-test the well under drought conditions.</li>
+        <li><strong>pump_depth_m:</strong> An <em>estimated</em> depth of the submersible pump. This is calculated as 80% of the well's total depth, or 2.5m from the bottom, whichever is shallower.</li>
+        <li><strong>DEPTH:</strong> The total drilled depth of the well in meters.</li>
+        <li><strong>YIELD:</strong> The well's flow rate in Liters per Minute. Wells with very low yield (< 5 L/min) may have their risk category upgraded.</li>
+    </ul>
+  </div>
+</div>
+
+
+<div class="row">
+  <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">125860</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">12358</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">187</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">46.02</div></div></div>
+</div>
+
+
+<ul class="nav nav-tabs" id="reportTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-selected="true">All Wells</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="dist-tab" data-bs-toggle="tab" data-bs-target="#dist" type="button" role="tab">Risk Distribution</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="aq-tab" data-bs-toggle="tab" data-bs-target="#aq" type="button" role="tab">Risk by Aquifer</button>
+  </li>
+</ul>
+<div class="tab-content mt-3">
+
+<div class='tab-pane fade show active' id='all' role='tabpanel' aria-labelledby='all-tab'>
+<div class="table-responsive"><table id="all_wells_table" class="table table-striped table-bordered" style="width:100%"></table></div>
+</div>
+<div class='tab-pane fade' id='dist' role='tabpanel' aria-labelledby='dist-tab'>
+<table border="1" class="dataframe table table-striped" id="risk_table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>drying_risk</th>
+      <th>count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>No data</td>
+      <td>102313</td>
+    </tr>
+    <tr>
+      <td>CRITICAL - Well may be dry</td>
+      <td>12358</td>
+    </tr>
+    <tr>
+      <td>Low risk - &gt;5m buffer</td>
+      <td>10745</td>
+    </tr>
+    <tr>
+      <td>Moderate risk - 2-5m buffer</td>
+      <td>257</td>
+    </tr>
+    <tr>
+      <td>High risk - &lt;2m buffer</td>
+      <td>187</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<div class='tab-pane fade' id='aq' role='tabpanel' aria-labelledby='aq-tab'>
+<table border="1" class="dataframe table table-striped" id="aq_table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>drying_risk</th>
+      <th>CRITICAL - Well may be dry</th>
+      <th>High risk - &lt;2m buffer</th>
+      <th>Low risk - &gt;5m buffer</th>
+      <th>Moderate risk - 2-5m buffer</th>
+      <th>No data</th>
+    </tr>
+    <tr>
+      <th>aquifer_type</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>Unknown</th>
+      <td>12358</td>
+      <td>187</td>
+      <td>10745</td>
+      <td>257</td>
+      <td>102313</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+</div>
+<script> const dtColumns = [{"data": "WELL_ID", "title": "WELL_ID"}, {"data": "location_display", "title": "location_display"}, {"data": "Map Link", "title": "Map Link"}, {"data": "DEPTH", "title": "DEPTH"}, {"data": "STATIC_WATER_LEVEL", "title": "STATIC_WATER_LEVEL"}, {"data": "current_water_level_m_observed", "title": "current_water_level_m_observed"}, {"data": "drought_drawdown_m", "title": "drought_drawdown_m"}, {"data": "stressed_water_level_m", "title": "stressed_water_level_m"}, {"data": "pump_depth_m", "title": "pump_depth_m"}, {"data": "buffer_m", "title": "buffer_m"}, {"data": "drying_risk", "title": "drying_risk"}, {"data": "YIELD", "title": "YIELD"}, {"data": "yield_category", "title": "yield_category"}, {"data": "aquifer_type", "title": "aquifer_type"}]; const dataJsonFile = 'wells_data.json';</script>
+
+<script>
+$(document).ready(function() {
+  // Use Fetch API to load the data payload separately
+  fetch(dataJsonFile)
+    .then(response => {
+        if (!response.ok) {
+            // Handle HTTP errors (e.g., 404)
+            throw new Error('Failed to load data: ' + response.statusText);
+        }
+        return response.json();
+    })
+    .then(allWellsData => {
+        // Initialize the large table from JSON data after fetching
+        // Note: responsive: true is maintained for mobile-friendliness.
+        $('#all_wells_table').DataTable({
+            data: allWellsData,
+            columns: dtColumns,
+            pageLength: 25,
+            lengthMenu: [10, 25, 50, 100, {label: "All", value: -1}],
+            dom: 'Bfrtip',
+            buttons: ['copy', 'csv', 'excel', 'print'],
+            scrollX: true,
+            responsive: true // Ensures mobile-friendly layout
+        });
+    })
+    .catch(error => {
+        console.error("Error initializing dashboard:", error);
+        // Display an error message to the user if the data fails to load
+        $('#all_wells_table').html("<p style='color:red;'>Error: Could not load well data. Ensure 'wells_data.json' is present alongside the HTML report.</p>");
+    });
+
+  // Initialize the smaller, pre-rendered tables 
+  // (Top 20 table initialization removed, only risk/aq tables remain)
+  $('#risk_table, #aq_table').DataTable({
+    pageLength: 20,
+    dom: 'Bfrtip',
+    buttons: ['copy', 'csv', 'print'],
+    scrollX: true,
+    responsive: true // Added responsive for these tables too
+  });
+});
+</script>
+
+</body></html>
