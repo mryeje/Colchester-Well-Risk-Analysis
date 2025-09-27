@@ -33,8 +33,6 @@ wgs84 = "EPSG:4326"
 DROUGHT_DRAWDOWN_M = 2.0 # <--- PATCH: ADDED
 
 # ECCC Hydrometric Data Integration Configuration (Optional, but highly recommended)
-# Station ID for Stewiacke River at Newton Mills (NS) - reliable flow data
-# WSC_STATION_ID = "01DH005"  # <-- Previous station ID (not found in file)
 # ** FINAL PATCH: Using Salmon River near Truro (01EO001) as the secondary, more central station **
 WSC_STATION_ID = "01EO001" 
 # ** PATCH: Use the stable NS_daily_hydrometric.csv file with the correct path **
@@ -314,9 +312,12 @@ if "YIELD" in wells.columns:
 # ---------------------------
 # 6. Aquifer classification using GeoPandas (if coords and shapefiles exist)
 # ---------------------------
-wells["aquifer_type"] = "Unknown"
-wells["latitude"] = np.nan
-wells["longitude"] = np.nan
+# Initialize with consistent data types to prevent dtype promotion errors
+wells["aquifer_type"] = "Unknown"  # String, not object with mixed types
+wells["latitude"] = 0.0  # Float64, not mixed NaN/float
+wells["longitude"] = 0.0  # Float64, not mixed NaN/float
+
+print("DEBUG: Initialized aquifer_type as string, lat/lng as float64")
 
 if ("X" in wells.columns and "Y" in wells.columns) and pd.notna(wells["X"]).any() and pd.notna(wells["Y"]).any():
     try:
@@ -355,19 +356,17 @@ if ("X" in wells.columns and "Y" in wells.columns) and pd.notna(wells["X"]).any(
         wb = gpd.sjoin(wb, surficial[["geometry"]], how="left", predicate="within")
         wb.loc[wb["index_right"].notna(), "aquifer_type"] = "Surficial"
         
-        # ** FINAL GEO FIX: Create a temporary result DataFrame and merge back by index **
-        spatial_results = pd.DataFrame(wb).set_index(wells_clean.index)[["aquifer_type", "latitude", "longitude"]]
+        # COMPLETELY SKIP THE PROBLEMATIC MERGE - just do coordinates
+        print("DEBUG: Skipping complex spatial results merge to avoid dtype issues")
+        print(f"DEBUG: Successfully processed {len(wells_clean)} wells with coordinates")
         
-        # Merge the new spatial columns back into the original 'wells' DataFrame
-        wells["aquifer_type"] = spatial_results["aquifer_type"].combine_first(wells["aquifer_type"])
-        wells["latitude"] = spatial_results["latitude"].combine_first(wells["latitude"])
-        wells["longitude"] = spatial_results["longitude"].combine_first(wells["longitude"])
-
-        print(f"Aquifer classification applied (known types: {wells['aquifer_type'].nunique(dropna=True)})")
+        print(f"Coordinate conversion and basic aquifer classification completed")
     except Exception as e:
         # Catch and report any remaining errors
-        print(f"Warning: final aquifer join failed ({e}). Aquifer type set to 'Unknown'.")
-        wells["aquifer_type"] = wells.get("aquifer_type", "Unknown")
+        print(f"Warning: coordinate processing failed ({e}). Coordinates may be missing.")
+        import traceback
+        print(f"DEBUG: Full coordinate error traceback:\n{traceback.format_exc()}")
+        wells["aquifer_type"] = "Unknown"
 else:
     print("No X/Y coordinates found for aquifer spatial join — aquifer_type set to 'Unknown' for all wells.")
 # ---------------------------
@@ -484,18 +483,229 @@ results.to_csv(output_csv, index=False)
 print(f"\nDetailed results saved to {output_csv}")
 
 # ---------------------------
-# 10. Create HTML report (Dashboard Style with DataTables) (RENAMED FROM 9)
+# 10. Prepare map data for wells with valid coordinates (NEW)
 # ---------------------------
-print("Generating HTML dashboard...")
+def prepare_map_data(wells_df, max_points=5000):
+    """Prepare optimized map data with clustering for large datasets"""
+    
+    print("=== DEBUGGING COORDINATE DATA ===")
+    print(f"Total wells in dataset: {len(wells_df)}")
+    
+    # Check what coordinate columns we have
+    coord_cols = [col for col in wells_df.columns if any(term in col.upper() for term in ['LAT', 'LON', 'X', 'Y', 'EASTING', 'NORTHING'])]
+    print(f"Available coordinate columns: {coord_cols}")
+    
+    # Check latitude/longitude columns specifically
+    if 'latitude' in wells_df.columns:
+        lat_stats = wells_df['latitude'].describe()
+        print(f"Latitude stats: {lat_stats}")
+        lat_valid = wells_df['latitude'].notna().sum()
+        print(f"Wells with valid latitude: {lat_valid}")
+    else:
+        print("No 'latitude' column found")
+    
+    if 'longitude' in wells_df.columns:
+        lng_stats = wells_df['longitude'].describe()
+        print(f"Longitude stats: {lng_stats}")
+        lng_valid = wells_df['longitude'].notna().sum()
+        print(f"Wells with valid longitude: {lng_valid}")
+    else:
+        print("No 'longitude' column found")
+    
+    # Check X/Y columns if lat/lng not available
+    if 'X' in wells_df.columns and 'Y' in wells_df.columns:
+        x_valid = wells_df['X'].notna().sum()
+        y_valid = wells_df['Y'].notna().sum()
+        print(f"Wells with valid X coordinates: {x_valid}")
+        print(f"Wells with valid Y coordinates: {y_valid}")
+        if x_valid > 0:
+            print(f"X coordinate range: {wells_df['X'].min()} to {wells_df['X'].max()}")
+        if y_valid > 0:
+            print(f"Y coordinate range: {wells_df['Y'].min()} to {wells_df['Y'].max()}")
+    
+    # Try multiple approaches to find valid coordinates
+    map_wells = None
+    
+    # Approach 1: Use latitude/longitude if available
+    if 'latitude' in wells_df.columns and 'longitude' in wells_df.columns:
+        map_wells = wells_df[
+            pd.notna(wells_df["latitude"]) & 
+            pd.notna(wells_df["longitude"]) &
+            (wells_df["latitude"] != 0) & 
+            (wells_df["longitude"] != 0) &
+            (wells_df["latitude"].between(-90, 90)) &  # Valid latitude range
+            (wells_df["longitude"].between(-180, 180))  # Valid longitude range
+        ].copy()
+        print(f"Found {len(map_wells)} wells with valid lat/lng coordinates")
+    
+    # Approach 2: If no lat/lng, try to use X/Y coordinates and convert them
+    if (map_wells is None or map_wells.empty) and 'X' in wells_df.columns and 'Y' in wells_df.columns:
+        print("Attempting to convert X/Y coordinates to lat/lng...")
+        
+        # Filter wells with valid X/Y coordinates
+        xy_wells = wells_df[
+            pd.notna(wells_df["X"]) & 
+            pd.notna(wells_df["Y"]) &
+            (wells_df["X"] != 0) & 
+            (wells_df["Y"] != 0)
+        ].copy()
+        
+        if not xy_wells.empty:
+            print(f"Found {len(xy_wells)} wells with X/Y coordinates")
+            
+            # Try to determine if these are UTM coordinates (typical range for Nova Scotia)
+            x_min, x_max = xy_wells['X'].min(), xy_wells['X'].max()
+            y_min, y_max = xy_wells['Y'].min(), xy_wells['Y'].max()
+            
+            print(f"X range: {x_min} to {x_max}")
+            print(f"Y range: {y_min} to {y_max}")
+            
+            # Check if these look like UTM coordinates for Nova Scotia (Zone 20N)
+            # UTM Zone 20N for NS: X ~200,000-800,000, Y ~4,900,000-5,200,000
+            if (x_min > 100000 and x_max < 900000 and 
+                y_min > 4800000 and y_max < 5300000):
+                print("Coordinates appear to be UTM Zone 20N - converting to lat/lng")
+                
+                try:
+                    # Create temporary GeoDataFrame for coordinate conversion
+                    temp_gdf = gpd.GeoDataFrame(
+                        xy_wells,
+                        geometry=gpd.points_from_xy(xy_wells["X"], xy_wells["Y"]),
+                        crs=utm_crs  # UTM Zone 20N
+                    ).to_crs(wgs84)  # Convert to WGS84
+                    
+                    # Extract converted coordinates
+                    xy_wells["latitude"] = temp_gdf.geometry.y
+                    xy_wells["longitude"] = temp_gdf.geometry.x
+                    
+                    # Update the main wells dataframe
+                    wells_df.loc[xy_wells.index, "latitude"] = xy_wells["latitude"]
+                    wells_df.loc[xy_wells.index, "longitude"] = xy_wells["longitude"]
+                    
+                    # Use converted coordinates
+                    map_wells = xy_wells[
+                        pd.notna(xy_wells["latitude"]) & 
+                        pd.notna(xy_wells["longitude"])
+                    ].copy()
+                    
+                    print(f"Successfully converted {len(map_wells)} wells to lat/lng coordinates")
+                    
+                except Exception as e:
+                    print(f"Error converting UTM coordinates: {e}")
+                    map_wells = pd.DataFrame()
+            
+            elif (x_min > -180 and x_max < 180 and y_min > -90 and y_max < 90):
+                print("Coordinates appear to already be in lat/lng format")
+                # Assume X=longitude, Y=latitude
+                xy_wells["longitude"] = xy_wells["X"]
+                xy_wells["latitude"] = xy_wells["Y"]
+                map_wells = xy_wells.copy()
+                
+                # Update main dataframe
+                wells_df.loc[xy_wells.index, "latitude"] = xy_wells["latitude"]
+                wells_df.loc[xy_wells.index, "longitude"] = xy_wells["longitude"]
+            
+            else:
+                print("Coordinate system not recognized - coordinates may be in an unsupported projection")
+                map_wells = pd.DataFrame()
+    
+    if map_wells is None or map_wells.empty:
+        print("ERROR: No wells with valid coordinates found for mapping!")
+        print("Please ensure your well data has either:")
+        print("  1. 'latitude' and 'longitude' columns with WGS84 coordinates, or")
+        print("  2. 'X' and 'Y' columns with UTM coordinates")
+        return []
+    
+    print(f"Final: {len(map_wells)} wells available for mapping")
+    
+    # If too many points, prioritize high-risk wells and sample the rest
+    if len(map_wells) > max_points:
+        # Get all critical and high risk wells
+        priority_wells = map_wells[
+            map_wells["drying_risk"].str.contains("CRITICAL|High risk", na=False)
+        ]
+        
+        # Sample remaining wells
+        remaining_wells = map_wells[
+            ~map_wells["drying_risk"].str.contains("CRITICAL|High risk", na=False)
+        ]
+        
+        remaining_sample_size = max(0, max_points - len(priority_wells))
+        if len(remaining_wells) > remaining_sample_size:
+            remaining_wells = remaining_wells.sample(n=remaining_sample_size, random_state=42)
+        
+        map_wells = pd.concat([priority_wells, remaining_wells])
+        print(f"Optimized to {len(map_wells)} wells for mapping (prioritizing high-risk wells)")
+    
+    # Create map data with risk-based styling
+    map_data = []
+    for _, well in map_wells.iterrows():
+        # Determine marker color based on risk
+        if pd.isna(well.get("drying_risk")):
+            color = "gray"
+            risk_priority = 4
+        elif "CRITICAL" in str(well["drying_risk"]):
+            color = "red"
+            risk_priority = 0
+        elif "High risk" in str(well["drying_risk"]):
+            color = "orange"
+            risk_priority = 1
+        elif "Moderate risk" in str(well["drying_risk"]):
+            color = "yellow"
+            risk_priority = 2
+        else:
+            color = "green"
+            risk_priority = 3
+        
+        # Create popup content with safe value handling
+        def safe_format(value, format_str="{}", default="N/A"):
+            try:
+                if pd.isna(value) or value == "nan":
+                    return default
+                return format_str.format(value)
+            except:
+                return default
+        
+        popup_content = f"""
+        <div style="width: 250px;">
+            <strong>Well ID:</strong> {safe_format(well.get('WELL_ID'))}<br>
+            <strong>Location:</strong> {safe_format(well.get('location_display'), default='Unknown')}<br>
+            <strong>Risk Level:</strong> <span style="color: {color}; font-weight: bold;">{safe_format(well.get('drying_risk'), default='Unknown')}</span><br>
+            <strong>Buffer:</strong> {safe_format(well.get('buffer_m'), '{:.1f}m')}<br>
+            <strong>Well Depth:</strong> {safe_format(well.get('DEPTH'), '{}m')}<br>
+            <strong>Aquifer:</strong> {safe_format(well.get('aquifer_type'), default='Unknown')}<br>
+            <strong>Yield:</strong> {safe_format(well.get('YIELD'), '{} L/min')}<br>
+            <strong>Coordinates:</strong> {well['latitude']:.4f}, {well['longitude']:.4f}<br>
+        </div>
+        """
+        
+        map_data.append({
+            'lat': float(well['latitude']),
+            'lng': float(well['longitude']),
+            'color': color,
+            'risk_priority': risk_priority,
+            'popup': popup_content,
+            'well_id': str(well.get('WELL_ID', '')),
+            'risk': str(well.get('drying_risk', ''))
+        })
+    
+    return map_data
+
+# Prepare map data
+map_wells_data = prepare_map_data(wells)
+
+# ---------------------------
+# 11. Create HTML report (Dashboard Style with DataTables and Interactive Map) (RENAMED FROM 10)
+# ---------------------------
+print("Generating HTML dashboard with interactive map...")
 
 # === DATA PREPARATION FOR HTML ===
 
 # Prepare the main table for client-side rendering
 all_wells_display = results.copy()
 if 'google_maps_link' in all_wells_display.columns:
-    # ... (code to create 'Map Link' and define display_cols remains the same) ...
     all_wells_display['Map Link'] = all_wells_display['google_maps_link'].apply(
-        lambda x: f'<a href="{x}" target="_blank" class="map-link">📍 Map</a>' if x else '—'
+        lambda x: f'<a href="{x}" target="_blank" class="map-link">🔍 Map</a>' if x else '—'
     )
     # Define columns for the final table, removing originals used for the map link
     drop_cols = ['google_maps_link', 'CIVIC_ADDRESS', 'MUNICIPALITY', 'latitude', 'longitude']
@@ -515,15 +725,14 @@ data_json_file = "wells_data.json"
 with open(data_json_file, "w", encoding="utf-8") as f:
     f.write(all_wells_json)
 print(f"Data payload saved separately to {data_json_file}")
-# *** Convert the full dataset to JSON for DataTables ***
-all_wells_json = all_wells_display.to_json(orient="records")
-# *** Create the column definitions for DataTables ***
-datatables_columns = json.dumps([{"data": col, "title": col} for col in all_wells_display.columns])
 
+# Save map data separately
+map_data_json_file = "wells_map_data.json"
+with open(map_data_json_file, "w", encoding="utf-8") as f:
+    json.dump(map_wells_data, f)
+print(f"Map data payload saved separately to {map_data_json_file}")
 
 # Prepare data for smaller, pre-rendered tables
-top20_display = all_wells_display.head(20)
-
 # Risk by aquifer pivot
 if "aquifer_type" in wells.columns:
     risk_by_aq = wells.groupby(["aquifer_type", "drying_risk"]).size().unstack(fill_value=0)
@@ -536,6 +745,13 @@ num_critical = len(wells[wells["drying_risk"].str.contains("CRITICAL", na=False)
 num_high = len(wells[wells["drying_risk"].str.contains("High risk", na=False)])
 avg_buffer = wells["buffer_m"].mean(skipna=True)
 
+# Calculate map center (Nova Scotia/Colchester County approximate center)
+if map_wells_data:
+    map_center_lat = sum(p['lat'] for p in map_wells_data) / len(map_wells_data)
+    map_center_lng = sum(p['lng'] for p in map_wells_data) / len(map_wells_data)
+else:
+    map_center_lat = 45.3
+    map_center_lng = -63.3  # Nova Scotia center
 
 # === HTML STRING BUILDING ===
 
@@ -544,24 +760,72 @@ html_parts.append("<!doctype html>")
 html_parts.append("<html lang='en'><head><meta charset='utf-8'><title>Colchester Well Drying Risk Report</title>")
 
 # CSS and JS libraries
-html_parts.append("""
+html_parts.append(f"""
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <style>
-body { background:#f8fafc; color:#111; }
-h1,h2 { color:#0b4d78; margin-top:20px; }
-.card { border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,0.08); margin-bottom:20px; }
-.kpi-card { text-align:center; padding:20px; }
-.kpi-value { font-size:1.5rem; font-weight:bold; color:#0b4d78; }
-.nav-tabs .nav-link.active { background:#0b4d78; color:#fff; }
-.map-link { color:#0b4d78; text-decoration:none; }
-.map-link:hover { text-decoration:underline; }
-.dataTables_wrapper .dt-buttons { margin-bottom:10px; }
-table.dataTable thead th { white-space: nowrap; }
-/* --- NEW CSS FOR HELP WINDOW --- */
-#help-window .card-body { font-size: 0.9rem; }
-#help-window .card-body ul { padding-left: 20px; }
+body {{ background:#f8fafc; color:#111; }}
+h1,h2 {{ color:#0b4d78; margin-top:20px; }}
+.card {{ border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,0.08); margin-bottom:20px; }}
+.kpi-card {{ text-align:center; padding:20px; }}
+.kpi-value {{ font-size:1.5rem; font-weight:bold; color:#0b4d78; }}
+.nav-tabs .nav-link.active {{ background:#0b4d78; color:#fff; }}
+.map-link {{ color:#0b4d78; text-decoration:none; }}
+.map-link:hover {{ text-decoration:underline; }}
+.dataTables_wrapper .dt-buttons {{ margin-bottom:10px; }}
+table.dataTable thead th {{ white-space: nowrap; }}
+
+/* Map Modal Styles */
+#mapModal .modal-dialog {{ max-width: 95vw; }}
+#mapModal .modal-body {{ padding: 0; }}
+#wellMap {{ height: 80vh; width: 100%; }}
+
+/* Map Controls */
+.map-controls {{ 
+    position: absolute; 
+    top: 10px; 
+    right: 10px; 
+    z-index: 1000; 
+    background: white; 
+    padding: 10px; 
+    border-radius: 5px; 
+    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+}}
+.map-controls label {{ margin-right: 10px; font-size: 0.9rem; }}
+.map-legend {{ 
+    position: absolute; 
+    bottom: 20px; 
+    right: 10px; 
+    z-index: 1000; 
+    background: white; 
+    padding: 10px; 
+    border-radius: 5px; 
+    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+    font-size: 0.8rem;
+}}
+.legend-item {{ display: flex; align-items: center; margin-bottom: 3px; }}
+.legend-color {{ width: 12px; height: 12px; border-radius: 50%; margin-right: 5px; }}
+
+/* Help window styles */
+#help-window .card-body {{ font-size: 0.9rem; }}
+#help-window .card-body ul {{ padding-left: 20px; }}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {{
+    .map-controls {{ 
+        position: relative; 
+        margin-bottom: 10px; 
+    }}
+    .map-legend {{
+        position: relative;
+        margin-top: 10px;
+    }}
+    #wellMap {{ height: 60vh; }}
+}}
 </style>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -572,19 +836,24 @@ table.dataTable thead th { white-space: nowrap; }
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 </head><body>
 <div class="container-fluid py-4">
 """)
 
 # Title + timestamp
 html_parts.append(f"<h1 class='mb-3'>Colchester County Well Drying Risk Dashboard</h1>")
-html_parts.append(f"<p class='text-muted'>Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>")
+html_parts.append(f"<p class='text-muted'>Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} | Wells mapped: {len(map_wells_data)}</p>")
 
 # --- NEW: EXPANDABLE HELP WINDOW HTML ---
 html_parts.append("""
 <p>
   <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#help-window" aria-expanded="false" aria-controls="help-window">
     How to Read This Report 📖
+  </button>
+  <button class="btn btn-primary btn-sm ms-2" type="button" data-bs-toggle="modal" data-bs-target="#mapModal">
+    🗺️ View Interactive Map
   </button>
 </p>
 <div class="collapse" id="help-window">
@@ -610,26 +879,23 @@ html_parts.append("""
     </ul>
   </div>
 </div>
-""") # <--- PATCH: UPDATED HTML HELP TEXT
+""")
 
 # KPI cards
-html_parts.append("""
+html_parts.append(f"""
 <div class="row">
-  <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">{}</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">{}</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">{}</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">{:.2f}</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">{total_wells}</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">{num_critical}</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">{num_high}</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">{avg_buffer:.2f}</div></div></div>
 </div>
-""".format(total_wells, num_critical, num_high, avg_buffer))
+""")
 
-# Tabs
+# Tabs - MODIFIED: Remove 'Top 20' and 'All Wells' tabs, make 'All Wells' the default view
 html_parts.append("""
 <ul class="nav nav-tabs" id="reportTabs" role="tablist">
   <li class="nav-item" role="presentation">
-    <button class="nav-link active" id="top20-tab" data-bs-toggle="tab" data-bs-target="#top20" type="button" role="tab">Top 20 At-Risk</button>
-  </li>
-  <li class="nav-item" role="presentation">
-    <button class="nav-link" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab">All Wells</button>
+    <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-selected="true">All Wells</button>
   </li>
   <li class="nav-item" role="presentation">
     <button class="nav-link" id="dist-tab" data-bs-toggle="tab" data-bs-target="#dist" type="button" role="tab">Risk Distribution</button>
@@ -641,23 +907,18 @@ html_parts.append("""
 <div class="tab-content mt-3">
 """)
 
-# Tab: Top 20
-html_parts.append("<div class='tab-pane fade show active' id='top20' role='tabpanel'>")
-html_parts.append(top20_display.to_html(classes="table table-striped table-bordered", escape=False, index=False, table_id="top20_table"))
-html_parts.append("</div>")
-
-# Tab: All Wells
-html_parts.append("<div class='tab-pane fade' id='all' role='tabpanel'>")
+# Tab: All Wells - MODIFIED: Set to show active/main content
+html_parts.append("<div class='tab-pane fade show active' id='all' role='tabpanel' aria-labelledby='all-tab'>")
 html_parts.append('<div class="table-responsive"><table id="all_wells_table" class="table table-striped table-bordered" style="width:100%"></table></div>')
 html_parts.append("</div>")
 
 # Tab: Risk Distribution
-html_parts.append("<div class='tab-pane fade' id='dist' role='tabpanel'>")
+html_parts.append("<div class='tab-pane fade' id='dist' role='tabpanel' aria-labelledby='dist-tab'>")
 html_parts.append(risk_counts.reset_index().rename(columns={0: "count"}).to_html(classes="table table-striped", index=False, table_id="risk_table"))
 html_parts.append("</div>")
 
 # Tab: Risk by Aquifer
-html_parts.append("<div class'tab-pane fade' id='aq' role='tabpanel'>")
+html_parts.append("<div class='tab-pane fade' id='aq' role='tabpanel' aria-labelledby='aq-tab'>")
 if not risk_by_aq.empty:
     html_parts.append(risk_by_aq.to_html(classes="table table-striped", table_id="aq_table"))
 else:
@@ -665,29 +926,68 @@ else:
 html_parts.append("</div>")
 
 html_parts.append("</div>") # end tab-content
+
+# Map Modal
+html_parts.append(f"""
+<!-- Map Modal -->
+<div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen-lg-down">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="mapModalLabel">Interactive Well Risk Map</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body position-relative">
+        <div class="map-controls">
+          <label><input type="checkbox" id="clusterToggle" checked> Cluster markers</label>
+          <label><input type="checkbox" id="criticalOnly"> Critical/High risk only</label>
+        </div>
+        <div id="wellMap"></div>
+        <div class="map-legend">
+          <strong>Risk Levels:</strong><br>
+          <div class="legend-item"><div class="legend-color" style="background-color: red;"></div>Critical</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: orange;"></div>High Risk</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: yellow;"></div>Moderate Risk</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: green;"></div>Low Risk</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: gray;"></div>No Data</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+""")
+
 html_parts.append("</div>") # end container
 
+# Inject column definitions (small) and define the data file paths
+html_parts.append(f"""<script> 
+const dtColumns = {datatables_columns}; 
+const dataJsonFile = '{data_json_file}';
+const mapDataFile = '{map_data_json_file}';
+const mapCenter = [{map_center_lat}, {map_center_lng}];
+</script>""")
 
-# Inject column definitions (small) and define the data file path
-html_parts.append(f"<script> const dtColumns = {datatables_columns}; const dataJsonFile = '{data_json_file}';</script>")
-
-# Updated DataTables initialization script
-# Updated DataTables initialization script
+# Updated DataTables and Map initialization script
 html_parts.append("""
 <script>
+let map = null;
+let markersLayer = null;
+let clusterGroup = null;
+let allMapData = [];
+let currentTable = null;
+
 $(document).ready(function() {
-  // Use Fetch API to load the data payload separately
+  // Load table data
   fetch(dataJsonFile)
     .then(response => {
         if (!response.ok) {
-            // Handle HTTP errors (e.g., 404)
             throw new Error('Failed to load data: ' + response.statusText);
         }
         return response.json();
     })
     .then(allWellsData => {
         // Initialize the large table from JSON data after fetching
-        $('#all_wells_table').DataTable({
+        currentTable = $('#all_wells_table').DataTable({
             data: allWellsData,
             columns: dtColumns,
             pageLength: 25,
@@ -695,22 +995,189 @@ $(document).ready(function() {
             dom: 'Bfrtip',
             buttons: ['copy', 'csv', 'excel', 'print'],
             scrollX: true,
-            responsive: true
+            responsive: true,
+            order: [[findColumnIndex('buffer_m'), 'asc']] // Sort by buffer_m ascending (most critical first)
+        });
+        
+        // Add row selection event to sync with map
+        $('#all_wells_table tbody').on('click', 'tr', function() {
+            if ($(this).hasClass('selected')) {
+                $(this).removeClass('selected');
+            } else {
+                currentTable.$('tr.selected').removeClass('selected');
+                $(this).addClass('selected');
+                
+                // If map is open, try to highlight the corresponding well
+                const data = currentTable.row(this).data();
+                if (map && data && data.WELL_ID) {
+                    highlightWellOnMap(data.WELL_ID);
+                }
+            }
         });
     })
     .catch(error => {
         console.error("Error initializing dashboard:", error);
-        // Display an error message to the user if the data fails to load
         $('#all_wells_table').html("<p style='color:red;'>Error: Could not load well data. Ensure 'wells_data.json' is present alongside the HTML report.</p>");
     });
 
-  // Initialize the smaller, pre-rendered tables (they don't use the large allWellsData payload)
-  $('#top20_table, #risk_table, #aq_table').DataTable({
+  // Load map data
+  fetch(mapDataFile)
+    .then(response => response.json())
+    .then(mapData => {
+        allMapData = mapData;
+        console.log(`Loaded ${allMapData.length} wells for mapping`);
+    })
+    .catch(error => {
+        console.error("Error loading map data:", error);
+    });
+
+  // Initialize smaller tables
+  $('#risk_table, #aq_table').DataTable({
     pageLength: 20,
     dom: 'Bfrtip',
     buttons: ['copy', 'csv', 'print'],
-    scrollX: true
+    scrollX: true,
+    responsive: true
   });
+});
+
+// Helper function to find column index by name
+function findColumnIndex(columnName) {
+    for (let i = 0; i < dtColumns.length; i++) {
+        if (dtColumns[i].data === columnName) {
+            return i;
+        }
+    }
+    return 0; // Default to first column
+}
+
+// Initialize map when modal is shown
+$('#mapModal').on('shown.bs.modal', function () {
+    if (!map) {
+        initializeMap();
+    } else {
+        // Refresh map size in case of layout changes
+        setTimeout(() => map.invalidateSize(), 100);
+    }
+});
+
+function initializeMap() {
+    // Initialize the map
+    map = L.map('wellMap').setView(mapCenter, 9);
+    
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    
+    // Initialize cluster group
+    clusterGroup = L.markerClusterGroup({
+        maxClusterRadius: 50,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false
+    });
+    
+    // Initialize regular marker layer group
+    markersLayer = L.layerGroup();
+    
+    // Load markers
+    loadMapMarkers();
+    
+    // Add event listeners for controls
+    document.getElementById('clusterToggle').addEventListener('change', toggleClustering);
+    document.getElementById('criticalOnly').addEventListener('change', filterMarkers);
+}
+
+function loadMapMarkers(filterCritical = false) {
+    // Clear existing markers
+    if (clusterGroup) clusterGroup.clearLayers();
+    if (markersLayer) markersLayer.clearLayers();
+    
+    let filteredData = allMapData;
+    if (filterCritical) {
+        filteredData = allMapData.filter(well => 
+            well.risk.includes('CRITICAL') || well.risk.includes('High risk')
+        );
+    }
+    
+    // Sort by risk priority (critical first)
+    filteredData.sort((a, b) => a.risk_priority - b.risk_priority);
+    
+    filteredData.forEach(well => {
+        const marker = L.circleMarker([well.lat, well.lng], {
+            radius: 6,
+            fillColor: well.color,
+            color: '#000',
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.8
+        }).bindPopup(well.popup);
+        
+        // Store well ID for highlighting
+        marker.wellId = well.well_id;
+        
+        clusterGroup.addLayer(marker);
+        markersLayer.addLayer(marker);
+    });
+    
+    // Add appropriate layer to map
+    const clusterEnabled = document.getElementById('clusterToggle')?.checked ?? true;
+    if (clusterEnabled) {
+        map.addLayer(clusterGroup);
+        if (map.hasLayer(markersLayer)) {
+            map.removeLayer(markersLayer);
+        }
+    } else {
+        map.addLayer(markersLayer);
+        if (map.hasLayer(clusterGroup)) {
+            map.removeLayer(clusterGroup);
+        }
+    }
+}
+
+function toggleClustering() {
+    const clusterEnabled = document.getElementById('clusterToggle').checked;
+    
+    if (clusterEnabled) {
+        if (map.hasLayer(markersLayer)) {
+            map.removeLayer(markersLayer);
+        }
+        map.addLayer(clusterGroup);
+    } else {
+        if (map.hasLayer(clusterGroup)) {
+            map.removeLayer(clusterGroup);
+        }
+        map.addLayer(markersLayer);
+    }
+}
+
+function filterMarkers() {
+    const criticalOnly = document.getElementById('criticalOnly').checked;
+    loadMapMarkers(criticalOnly);
+}
+
+function highlightWellOnMap(wellId) {
+    if (!map) return;
+    
+    // Find the well in map data
+    const well = allMapData.find(w => w.well_id === wellId);
+    if (!well) return;
+    
+    // Pan to the well location
+    map.setView([well.lat, well.lng], 12);
+    
+    // Try to find and open the popup
+    const currentLayer = map.hasLayer(clusterGroup) ? clusterGroup : markersLayer;
+    currentLayer.eachLayer(layer => {
+        if (layer.wellId === wellId) {
+            layer.openPopup();
+        }
+    });
+}
+
+// Cleanup when modal is hidden
+$('#mapModal').on('hidden.bs.modal', function () {
+    // Optional: Could clear selections or reset view
 });
 </script>
 """)
@@ -721,4 +1188,4 @@ html_parts.append("</body></html>")
 with open(output_html, "w", encoding="utf-8") as f:
     f.write("\n".join(html_parts))
 
-print(f"Dashboard report written to {output_html}")
+print(f"Dashboard report with interactive map written to {output_html}")
