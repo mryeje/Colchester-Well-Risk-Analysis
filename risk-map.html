@@ -92,6 +92,20 @@
     <script>
         const MAP_CENTER = [45.3833, -63.3833]; // Near Truro, Colchester County, NS
         const INITIAL_ZOOM = 9;
+        
+        // List of possible coordinate keys to check (most common first)
+        const LATITUDE_KEYS = ['latitude', 'LATITUDE', 'lat', 'LAT', 'Y', 'y'];
+        const LONGITUDE_KEYS = ['longitude', 'LONGITUDE', 'lon', 'LON', 'X', 'x'];
+
+        // Helper function to find the first non-null/non-undefined value for a set of keys
+        function findCoordinateValue(well, keys) {
+            for (const key of keys) {
+                if (well[key] !== undefined && well[key] !== null) {
+                    return well[key];
+                }
+            }
+            return undefined; // If no key matches
+        }
 
         // Function to determine marker color based on risk
         function getMarkerColor(risk) {
@@ -124,7 +138,9 @@
 
 
         // Load Data and Add Markers
-        fetch('wells_data.json')
+        // FIX: Using new URL() with document.baseURI to resolve 'Failed to parse URL' error in certain environments.
+        const dataUrl = new URL('wells_data.json', document.baseURI).href;
+        fetch(dataUrl)
             .then(response => {
                 if (!response.ok) {
                     // Check for 404/network errors
@@ -139,13 +155,14 @@
                 // --- NEW DIAGNOSTIC CHECK ---
                 if (allWellsData && allWellsData.length > 0) {
                     const firstWell = allWellsData[0];
-                    console.log("--- DEBUG: First Well Data Check ---");
+                    console.log("--- DEBUG: First Well Data Check (Checking all 10 common key names) ---");
                     
-                    // Display all common coordinate keys and their types
-                    console.log(`Key 'latitude': ${firstWell.latitude}, Type: ${typeof firstWell.latitude}`);
-                    console.log(`Key 'LATITUDE': ${firstWell.LATITUDE}, Type: ${typeof firstWell.LATITUDE}`);
-                    console.log(`Key 'longitude': ${firstWell.longitude}, Type: ${typeof firstWell.longitude}`);
-                    console.log(`Key 'LONGITUDE': ${firstWell.LONGITUDE}, Type: ${typeof firstWell.LONGITUDE}`);
+                    const allKeys = [...LATITUDE_KEYS, ...LONGITUDE_KEYS];
+                    
+                    allKeys.forEach(key => {
+                        console.log(`Key '${key}': ${firstWell[key]}, Type: ${typeof firstWell[key]}`);
+                    });
+                    
                     console.log("-------------------------------------");
                 }
                 // -----------------------------
@@ -153,9 +170,9 @@
                 allWellsData.forEach(well => {
                     
                     // --- THE FIX: ROBUST COORDINATE LOOKUP ---
-                    // Try to retrieve the coordinates using common casing/names.
-                    const rawLat = well.latitude || well.LATITUDE;
-                    const rawLng = well.longitude || well.LONGITUDE;
+                    // Use helper function to find the first valid coordinate value
+                    const rawLat = findCoordinateValue(well, LATITUDE_KEYS);
+                    const rawLng = findCoordinateValue(well, LONGITUDE_KEYS);
                     
                     // Check if values are null, undefined, or empty strings first
                     if (!rawLat || !rawLng) {
