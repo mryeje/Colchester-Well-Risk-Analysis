@@ -140,18 +140,22 @@
                 if (allWellsData && allWellsData.length > 0) {
                     const firstWell = allWellsData[0];
                     console.log("--- DEBUG: First Well Data Check ---");
-                    console.log(`Raw Latitude Value: ${firstWell.latitude}, Type: ${typeof firstWell.latitude}`);
-                    console.log(`Raw Longitude Value: ${firstWell.longitude}, Type: ${typeof firstWell.longitude}`);
+                    
+                    // Display all common coordinate keys and their types
+                    console.log(`Key 'latitude': ${firstWell.latitude}, Type: ${typeof firstWell.latitude}`);
+                    console.log(`Key 'LATITUDE': ${firstWell.LATITUDE}, Type: ${typeof firstWell.LATITUDE}`);
+                    console.log(`Key 'longitude': ${firstWell.longitude}, Type: ${typeof firstWell.longitude}`);
+                    console.log(`Key 'LONGITUDE': ${firstWell.LONGITUDE}, Type: ${typeof firstWell.LONGITUDE}`);
                     console.log("-------------------------------------");
                 }
                 // -----------------------------
 
                 allWellsData.forEach(well => {
                     
-                    // --- FIX FOR COORDINATE VALIDATION ---
-                    // Retrieve raw values
-                    const rawLat = well.latitude;
-                    const rawLng = well.longitude;
+                    // --- THE FIX: ROBUST COORDINATE LOOKUP ---
+                    // Try to retrieve the coordinates using common casing/names.
+                    const rawLat = well.latitude || well.LATITUDE;
+                    const rawLng = well.longitude || well.LONGITUDE;
                     
                     // Check if values are null, undefined, or empty strings first
                     if (!rawLat || !rawLng) {
