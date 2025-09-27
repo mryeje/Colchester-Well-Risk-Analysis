@@ -136,6 +136,16 @@
                 let validPoints = 0;
                 let wellMarkers = L.layerGroup().addTo(map);
 
+                // --- NEW DIAGNOSTIC CHECK ---
+                if (allWellsData && allWellsData.length > 0) {
+                    const firstWell = allWellsData[0];
+                    console.log("--- DEBUG: First Well Data Check ---");
+                    console.log(`Raw Latitude Value: ${firstWell.latitude}, Type: ${typeof firstWell.latitude}`);
+                    console.log(`Raw Longitude Value: ${firstWell.longitude}, Type: ${typeof firstWell.longitude}`);
+                    console.log("-------------------------------------");
+                }
+                // -----------------------------
+
                 allWellsData.forEach(well => {
                     
                     // --- FIX FOR COORDINATE VALIDATION ---
@@ -152,9 +162,9 @@
                     const lat = parseFloat(rawLat);
                     const lng = parseFloat(rawLng);
                     
-                    // Check if parsing failed
-                    if (isNaN(lat) || isNaN(lng)) {
-                        return; // Skip if parsing resulted in NaN
+                    // Check if parsing failed, or if the value is 0 (which might be a default placeholder)
+                    if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
+                        return; // Skip if parsing resulted in NaN or coordinates are 0,0
                     }
                     // ------------------------------------
 
