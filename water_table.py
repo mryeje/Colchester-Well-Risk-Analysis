@@ -18,7 +18,8 @@ print("GeoPandas-enhanced version with Multi-Station Hydrometric Analysis\n")
 # ---------------------------
 # Helper / config
 # ---------------------------
-well_files = ["well_logs_with_coords.csv", "well_logs.csv", "wells.csv"]
+well_files = ["wells_with_county_added.csv", "well_logs_with_coords.csv", "well_logs.csv", "wells.csv"]
+
 obs_file = "obs_well_timeseries.csv"
 bedrock_shp = "h428nsgb.shp"
 surficial_shp = "h428nsgs.shp"
