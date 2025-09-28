@@ -1,4 +1,4 @@
-# water_table.py
+# water_table.py - PATCHED VERSION
 import pandas as pd
 import numpy as np
 import geopandas as gpd
@@ -7,12 +7,13 @@ import warnings
 import html
 from datetime import datetime
 import json
-import requests # <--- PATCH: ADDED
-import io # <--- PATCH: ADDED
+import requests
+import os
+import io
 warnings.filterwarnings('ignore')
 
 print("=== COLCHESTER WELL DRYING RISK ANALYSIS ===")
-print("GeoPandas-enhanced version — HTML report output\n")
+print("GeoPandas-enhanced version – HTML report output\n")
 
 # ---------------------------
 # Helper / config
@@ -30,13 +31,14 @@ wgs84 = "EPSG:4326"
 
 # Pareto Principle Addition: Drought Stress Test Configuration
 # Assumes a 2.0 meter worst-case drawdown due to drought for wells without detailed time series.
-DROUGHT_DRAWDOWN_M = 2.0 # <--- PATCH: ADDED
+DROUGHT_DRAWDOWN_M = 2.0
 
 # ECCC Hydrometric Data Integration Configuration (Optional, but highly recommended)
 # ** FINAL PATCH: Using Salmon River near Truro (01EO001) as the secondary, more central station **
 WSC_STATION_ID = "01EO001" 
 # ** PATCH: Use the stable NS_daily_hydrometric.csv file with the correct path **
 WSC_API_URL = "https://dd.weather.gc.ca/hydrometric/csv/NS/daily/NS_daily_hydrometric.csv"
+
 # ---------------------------
 # 1. Load well logs (try a few filenames)
 # ---------------------------
@@ -115,19 +117,151 @@ if wells.columns.duplicated().any():
         # drop the extra duplicate columns (keep one)
         wells = wells.loc[:, ~wells.columns.duplicated()]
 
-# Try to filter to Colchester if a COUNTY-like column exists
+# COORDINATE DIAGNOSTIC - Add this section here
+print("\n=== COORDINATE DIAGNOSTIC ===")
+coord_columns = [col for col in wells.columns if any(term in col.upper() for term in ['X', 'Y', 'EAST', 'NORTH', 'LAT', 'LON'])]
+print(f"Coordinate-related columns found: {coord_columns}")
+
+# Focus on the key coordinate columns
+key_coords = ['X', 'Y']
+for col in key_coords:
+    if col in wells.columns:
+        # Convert to numeric first to avoid the error
+        numeric_col = pd.to_numeric(wells[col], errors='coerce')
+        valid_coords = numeric_col.notna().sum()
+        print(f"{col}: {valid_coords} valid numeric values out of {len(wells)}")
+        if valid_coords > 0:
+            print(f"  Range: {numeric_col.min():.1f} to {numeric_col.max():.1f}")
+            print(f"  Sample values: {numeric_col.dropna().head(5).tolist()}")
+
+# ---------------------------
+# PATCH 1: IMPROVED COLCHESTER COUNTY FILTERING
+
+# Define all Colchester County municipalities and communities
+colchester_places = {
+    # Incorporated Municipalities
+    'municipality of the county of colchester', 'county of colchester', 'colchester county',
+    'town of truro', 'truro',
+    'town of stewiacke', 'stewiacke', 
+    'village of bible hill', 'bible hill',
+    'village of tatamagouche', 'tatamagouche',
+    'millbrook first nation',
+    
+    # County Subdivisions
+    'colchester subdivision a', 'colchester subdivision b', 'colchester subdivision c',
+    
+    # Rural Communities and Districts
+    'alton', 'brentwood', 'brookfield', 'hilden', 'onslow', 'masstown', 
+    'glenholme', 'little dyke', 'great village', 'highland village', 
+    'portapique', 'five houses', 'bass river', 'upper economy', 'cove road', 
+    'economy', 'carrs brook', 'lower economy', 'five islands', 'folly lake',
+    'kemptown', 'bayhead', 'brule', 'gays river', 'green oaks', 'beaver brook',
+    'old barns', 'truro heights', 'oliver', 'west new annan', 'central new annan',
+    'the falls', 'balmoral mills', 'east earltown', 'green creek', 'eastville',
+    'north river', 'nuttby', 'earltown', 'denmark', 'newton mills',
+    'upper onslow', 'onslow mountain', 'mccallum settlement', 'upper north river',
+    'central north river', 'upper brookside', 'upper kemptown', 'riversdale',
+    
+    # Additional Communities
+    'acadian mines', 'belmont', 'black rock', 'burnside', 'camden', 'castlereagh',
+    'cloverdale', 'coldstream', 'debert', 'east mines station', 'east stewiacke',
+    'east village', 'french river', 'greenfield', 'harmony', 'lanesville',
+    'londonderry', 'lornevale', 'lynn', 'montrose', 'pleasant hills', 'princeport',
+    'salmon river', 'sand point', 'south branch', 'union', 'valley', 
+    'west st. andrews', 'wittenburg'
+}
+
+print(f"Total wells before filtering: {len(wells)}")
+
+# Try multiple filtering approaches
+filtered_wells = None
+filter_method = "none"
+
+# Method 1: Check COUNTY column
 if "COUNTY" in wells.columns:
-    try:
-        mask = wells["COUNTY"].astype(str).str.lower() == "colchester"
-        if mask.any():
-            wells = wells[mask].copy()
-            print(f"Filtered to Colchester County wells: {len(wells)}")
-        else:
-            print("COUNTY column present but no rows equal 'Colchester' (case-insensitive); analyzing all rows.")
-    except Exception:
-        print("COUNTY column present but could not filter; analyzing all rows.")
+    county_mask = wells["COUNTY"].astype(str).str.contains("colchester", case=False, na=False)
+    if county_mask.any():
+        filtered_wells = wells[county_mask].copy()
+        filter_method = "COUNTY column"
+        print(f"Found {county_mask.sum()} wells using COUNTY column filter")
+
+# Method 2: Check MUNICIPALITY column  
+if filtered_wells is None and "MUNICIPALITY" in wells.columns:
+    muni_mask = pd.Series([False] * len(wells))
+    for place in colchester_places:
+        place_mask = wells["MUNICIPALITY"].astype(str).str.contains(place, case=False, na=False)
+        muni_mask = muni_mask | place_mask
+    
+    if muni_mask.any():
+        filtered_wells = wells[muni_mask].copy()
+        filter_method = "MUNICIPALITY column"
+        print(f"Found {muni_mask.sum()} wells using MUNICIPALITY column filter")
+
+# Method 3: Check CIVIC_ADDRESS or ADDRESS for Colchester places
+if filtered_wells is None:
+    for addr_col in ["CIVIC_ADDRESS", "ADDRESS", "LOCATION"]:
+        if addr_col in wells.columns:
+            addr_mask = pd.Series([False] * len(wells))
+            for place in colchester_places:
+                place_mask = wells[addr_col].astype(str).str.contains(place, case=False, na=False)
+                addr_mask = addr_mask | place_mask
+            
+            if addr_mask.any():
+                filtered_wells = wells[addr_mask].copy()
+                filter_method = f"{addr_col} column"
+                print(f"Found {addr_mask.sum()} wells using {addr_col} filter")
+                break
+
+# Method 4: Manual exclusion of obvious non-Colchester places
+if filtered_wells is None:
+    print("No direct Colchester filtering worked. Attempting exclusion filter...")
+    
+    # Known non-Colchester places that appeared in your JSON
+    exclude_places = [
+        'halls harbour', 'beaver bank', 'hrm', 'halifax', 'havre boucher', 
+        'prospect bay', 'antigonish', 'kings county', 'halifax county',
+        'pictou', 'cumberland', 'hants', 'digby', 'yarmouth', 'shelburne',
+        'queens', 'lunenburg', 'annapolis', 'cape breton'
+    ]
+    
+    exclude_mask = pd.Series([False] * len(wells))
+    for addr_col in ["CIVIC_ADDRESS", "ADDRESS", "LOCATION", "MUNICIPALITY"]:
+        if addr_col in wells.columns:
+            for exclude_place in exclude_places:
+                exclude_place_mask = wells[addr_col].astype(str).str.contains(exclude_place, case=False, na=False)
+                exclude_mask = exclude_mask | exclude_place_mask
+    
+    if exclude_mask.any():
+        filtered_wells = wells[~exclude_mask].copy()
+        filter_method = "exclusion filter"
+        print(f"Excluded {exclude_mask.sum()} wells from known non-Colchester locations")
+
+# Apply the filter
+if filtered_wells is not None:
+    wells = filtered_wells
+    print(f"Successfully filtered using {filter_method}: {len(wells)} wells remain")
+    
+    # Show what places were found
+    if "MUNICIPALITY" in wells.columns:
+        print("Top municipalities found:")
+        print(wells["MUNICIPALITY"].value_counts().head(10))
+    elif "CIVIC_ADDRESS" in wells.columns:
+        print("Sample addresses found:")
+        sample_addresses = wells["CIVIC_ADDRESS"].dropna().head(10).tolist()
+        for addr in sample_addresses:
+            print(f"  - {addr}")
+        
 else:
-    print("Warning: COUNTY column not found — analyzing all wells")
+    print("WARNING: Could not filter to Colchester County wells!")
+    print("Available columns:", wells.columns.tolist())
+    
+    # Show sample data to help debug
+    for col in ["COUNTY", "MUNICIPALITY", "CIVIC_ADDRESS", "ADDRESS"]:
+        if col in wells.columns:
+            print(f"\nSample {col} values:")
+            sample_values = wells[col].dropna().head(10).tolist()
+            for val in sample_values:
+                print(f"  - {val}")
 
 # ---------------------------
 # 2. Required columns check
@@ -148,6 +282,87 @@ if missing:
     if suggestions:
         print("Possible matching columns:", suggestions)
     raise SystemExit("Please rename or map your well log columns so DEPTH and STATIC_WATER_LEVEL exist (or use the mapping table in the script).")
+
+# ---------------------------
+# PATCH 2: STATIC WATER LEVEL VALIDATION AND CORRECTION
+# ---------------------------
+print("\n=== STATIC WATER LEVEL VALIDATION ===")
+wells["DEPTH"] = pd.to_numeric(wells["DEPTH"], errors="coerce")
+wells["STATIC_WATER_LEVEL"] = pd.to_numeric(wells["STATIC_WATER_LEVEL"], errors="coerce")
+
+print(f"Static water level stats:")
+swl_stats = wells["STATIC_WATER_LEVEL"].describe()
+print(swl_stats)
+print(f"Wells with static level > 100m: {(wells['STATIC_WATER_LEVEL'] > 100).sum()}")
+print(f"Wells with static level > 50m: {(wells['STATIC_WATER_LEVEL'] > 50).sum()}")
+print(f"Wells with static level > depth (impossible): {(wells['STATIC_WATER_LEVEL'] > wells['DEPTH']).sum()}")
+
+print(f"\nWell depth stats for comparison:")
+depth_stats = wells["DEPTH"].describe()
+print(depth_stats)
+
+# Identify and flag problematic data
+problematic_swl = wells["STATIC_WATER_LEVEL"] > 100
+impossible_swl = wells["STATIC_WATER_LEVEL"] > wells["DEPTH"]
+
+if problematic_swl.any():
+    print(f"\n*** DATA QUALITY WARNING ***")
+    print(f"Found {problematic_swl.sum()} wells with static water levels > 100m")
+    print(f"This is geologically unrealistic for Nova Scotia groundwater")
+    print(f"These values may represent:")
+    print(f"  - Elevation above sea level (instead of depth to water)")
+    print(f"  - Corrupted/mislabeled data")
+    print(f"  - Wrong units")
+    
+    # Show some examples
+    print(f"\nExamples of problematic wells:")
+    problem_wells = wells[problematic_swl][["WELL_ID", "DEPTH", "STATIC_WATER_LEVEL"]].head(5)
+    print(problem_wells.to_string(index=False))
+
+# Data correction strategy
+print(f"\n=== APPLYING DATA CORRECTIONS ===")
+
+# Strategy 1: Cap unrealistic values at 50m (typical maximum for NS)
+wells["STATIC_WATER_LEVEL_ORIGINAL"] = wells["STATIC_WATER_LEVEL"].copy()
+capped_count = 0
+
+# Cap values that are impossibly deep
+unrealistic_mask = wells["STATIC_WATER_LEVEL"] > 50
+if unrealistic_mask.any():
+    # For very deep reported static levels, assume they're elevation or corrupted
+    # Use a more realistic estimate based on well depth
+    wells.loc[unrealistic_mask, "STATIC_WATER_LEVEL"] = np.minimum(
+        wells.loc[unrealistic_mask, "DEPTH"] * 0.3,  # Assume water at 30% of depth
+        25.0  # Cap at 25m depth to water
+    )
+    capped_count = unrealistic_mask.sum()
+    print(f"Corrected {capped_count} wells with unrealistic static water levels")
+
+# Strategy 2: Fix impossible cases (static level > total depth)
+impossible_mask = wells["STATIC_WATER_LEVEL"] > wells["DEPTH"]
+if impossible_mask.any():
+    # For these cases, assume static level is reasonable fraction of depth
+    wells.loc[impossible_mask, "STATIC_WATER_LEVEL"] = wells.loc[impossible_mask, "DEPTH"] * 0.2
+    impossible_count = impossible_mask.sum()
+    print(f"Fixed {impossible_count} wells where static level > total depth")
+
+print(f"Corrected static water level stats:")
+print(wells["STATIC_WATER_LEVEL"].describe())
+
+# AQUIFER CLASSIFICATION DEBUGGING
+print("\n=== AQUIFER CLASSIFICATION DEBUG ===")
+print(f"Looking for shapefile files:")
+print(f"  Bedrock shapefile: {bedrock_shp} - exists: {os.path.exists(bedrock_shp)}")  
+print(f"  Surficial shapefile: {surficial_shp} - exists: {os.path.exists(surficial_shp)}")
+
+if ("X" in wells.columns and "Y" in wells.columns):
+    wells_with_coords = wells.dropna(subset=["X", "Y"])
+    print(f"Wells with valid X/Y coordinates: {len(wells_with_coords)}")
+    
+    if len(wells_with_coords) > 0:
+        print(f"Sample coordinates:")
+        for i, (_, row) in enumerate(wells_with_coords.head(3).iterrows()):
+            print(f"  Well {row.get('WELL_ID', 'Unknown')}: X={row['X']}, Y={row['Y']}")
 
 # ---------------------------
 # 3. Observation wells (if available)
@@ -180,12 +395,7 @@ try:
             wells["WELL_ID"] = wells.index.astype(str)
 
     # assign static level to current_water_level_m
-    if "STATIC_WATER_LEVEL" in wells.columns:
-        wells["current_water_level_m"] = pd.to_numeric(
-            wells["STATIC_WATER_LEVEL"].squeeze(), errors="coerce"
-        )
-    else:
-        wells["current_water_level_m"] = np.nan
+    wells["current_water_level_m"] = wells["STATIC_WATER_LEVEL"].copy()
 
     # try to update from current_levels - matching as strings
     current_levels["WELL_ID"] = current_levels["WELL_ID"].astype(str)
@@ -197,23 +407,11 @@ try:
             updated_count += mask.sum()
     print(f"Updated {updated_count} well rows with observation current levels (matches by WELL_ID)")
 except FileNotFoundError:
-    print("Observation file not found — using static water levels only")
-    # assign static level to current_water_level_m
-    if "STATIC_WATER_LEVEL" in wells.columns:
-        wells["current_water_level_m"] = pd.to_numeric(
-            wells["STATIC_WATER_LEVEL"].squeeze(), errors="coerce"
-        )
-    else:
-        wells["current_water_level_m"] = np.nan
+    print("Observation file not found – using corrected static water levels only")
+    wells["current_water_level_m"] = wells["STATIC_WATER_LEVEL"].copy()
 except Exception as e:
-    print(f"Warning: could not load/parse observation data ({e}) — using static levels only")
-    # assign static level to current_water_level_m
-    if "STATIC_WATER_LEVEL" in wells.columns:
-        wells["current_water_level_m"] = pd.to_numeric(
-            wells["STATIC_WATER_LEVEL"].squeeze(), errors="coerce"
-        )
-    else:
-        wells["current_water_level_m"] = np.nan
+    print(f"Warning: could not load/parse observation data ({e}) – using corrected static levels only")
+    wells["current_water_level_m"] = wells["STATIC_WATER_LEVEL"].copy()
 
 # ---------------------------
 # 4. Pump depth estimate & buffer
@@ -225,7 +423,6 @@ def estimate_pump_depth(depth):
     except Exception:
         return np.nan
 
-wells["DEPTH"] = pd.to_numeric(wells["DEPTH"], errors="coerce")
 wells["pump_depth_m"] = wells["DEPTH"].apply(estimate_pump_depth)
 wells["buffer_m"] = wells["pump_depth_m"] - wells["current_water_level_m"]
 
@@ -297,7 +494,7 @@ def fetch_real_time_discharge(station_id, api_url):
         return None
 
 # ---------------------------
-# 5. Yield adjustment if present (ORIGINALLY 5)
+# 5. Yield adjustment if present
 # ---------------------------
 if "YIELD" in wells.columns:
     wells["YIELD"] = pd.to_numeric(wells["YIELD"], errors="coerce")
@@ -309,9 +506,21 @@ if "YIELD" in wells.columns:
     low_yield_mask = (wells["YIELD"] < 5) & (wells["YIELD"].notna())
     wells.loc[low_yield_mask & (wells["drying_risk"].str.contains("Moderate")), "drying_risk"] = "High risk - Low yield well"
 
+# ADD THIS IMPORT at the top of your script (after the other imports):
+import os
+
+# REPLACE the entire aquifer classification section (around line 350-450) with this:
+
 # ---------------------------
 # 6. Aquifer classification using GeoPandas (if coords and shapefiles exist)
 # ---------------------------
+
+# AQUIFER CLASSIFICATION DEBUGGING
+print("\n=== AQUIFER CLASSIFICATION DEBUG ===")
+print(f"Looking for shapefile files:")
+print(f"  Bedrock shapefile: {bedrock_shp} - exists: {os.path.exists(bedrock_shp)}")  
+print(f"  Surficial shapefile: {surficial_shp} - exists: {os.path.exists(surficial_shp)}")
+
 # Initialize with consistent data types to prevent dtype promotion errors
 wells["aquifer_type"] = "Unknown"  # String, not object with mixed types
 wells["latitude"] = 0.0  # Float64, not mixed NaN/float
@@ -320,57 +529,105 @@ wells["longitude"] = 0.0  # Float64, not mixed NaN/float
 print("DEBUG: Initialized aquifer_type as string, lat/lng as float64")
 
 if ("X" in wells.columns and "Y" in wells.columns) and pd.notna(wells["X"]).any() and pd.notna(wells["Y"]).any():
+    wells_with_coords = wells.dropna(subset=["X", "Y"])
+    print(f"Wells with valid X/Y coordinates: {len(wells_with_coords)}")
+    
+    if len(wells_with_coords) > 0:
+        print(f"Sample coordinates:")
+        for i, (_, row) in enumerate(wells_with_coords.head(3).iterrows()):
+            print(f"  Well {row.get('WELL_ID', 'Unknown')}: X={row['X']}, Y={row['Y']}")
+    
     try:
+        print("DEBUG: Starting aquifer spatial analysis...")
+        
         # ** PATCH: Ensure X and Y are numeric, coercing any non-numeric values to NaN **
         wells["X"] = pd.to_numeric(wells["X"], errors='coerce') 
         wells["Y"] = pd.to_numeric(wells["Y"], errors='coerce') 
         
         # ** FINAL GEO FIX: Create a temporary DataFrame for spatial analysis from clean rows **
         wells_clean = wells.dropna(subset=["X", "Y"]).copy()
+        print(f"DEBUG: Wells with clean coordinates: {len(wells_clean)}")
         
         # Skip if no rows are left with valid coordinates
         if wells_clean.empty:
             print("Warning: All wells lacked valid X/Y coordinates for GeoPandas analysis.")
             raise Exception("No valid coordinates")
             
+        print("DEBUG: Creating GeoDataFrame...")
         # Create GeoDataFrame from the clean data
         wells_gdf = gpd.GeoDataFrame(
             wells_clean,
             geometry=gpd.points_from_xy(wells_clean["X"], wells_clean["Y"]),
             crs=utm_crs
         ).to_crs(wgs84)
+        print(f"DEBUG: Created GeoDataFrame with {len(wells_gdf)} wells")
         
         # Extract latitude and longitude from geometry
         wells_gdf["longitude"] = wells_gdf.geometry.x
         wells_gdf["latitude"] = wells_gdf.geometry.y
+        print("DEBUG: Extracted lat/lng coordinates")
 
+        print("DEBUG: Loading shapefile data...")
         # Load shapefiles and reproject to WGS84
         bedrock = gpd.read_file(bedrock_shp).to_crs(wgs84)
         surficial = gpd.read_file(surficial_shp).to_crs(wgs84)
+        print(f"DEBUG: Loaded bedrock polygons: {len(bedrock)}, surficial polygons: {len(surficial)}")
 
+        print("DEBUG: Performing spatial joins...")
         # Spatial join: bedrock
         wb = gpd.sjoin(wells_gdf, bedrock[["geometry"]], how="left", predicate="within")
-        wb["aquifer_type"] = np.where(wb["index_right"].notna(), "Bedrock", np.nan)
+        bedrock_matches = wb["index_right"].notna().sum()
+        print(f"DEBUG: Wells matching bedrock polygons: {bedrock_matches}")
+        
+        wb["aquifer_type"] = np.where(
+            wb["index_right"].notna(),
+            "Bedrock",
+            None  # use Python None instead of np.nan
+        ).astype(object)
+        
         # drop index_right then join to surficial
         wb = wb.drop(columns=[c for c in wb.columns if c == "index_right"])
         wb = gpd.sjoin(wb, surficial[["geometry"]], how="left", predicate="within")
+        surficial_matches = wb["index_right"].notna().sum()
+        print(f"DEBUG: Wells matching surficial polygons: {surficial_matches}")
+        
         wb.loc[wb["index_right"].notna(), "aquifer_type"] = "Surficial"
         
-        # COMPLETELY SKIP THE PROBLEMATIC MERGE - just do coordinates
-        print("DEBUG: Skipping complex spatial results merge to avoid dtype issues")
-        print(f"DEBUG: Successfully processed {len(wells_clean)} wells with coordinates")
+        # Count final aquifer classifications
+        aquifer_counts = wb["aquifer_type"].value_counts(dropna=False)
+        print(f"DEBUG: Final aquifer classification counts:")
+        print(aquifer_counts)
         
-        print(f"Coordinate conversion and basic aquifer classification completed")
+        # Now try to merge results back to main wells dataframe
+        print("DEBUG: Attempting to merge results back to main dataframe...")
+        # Use index-based merge to avoid dtype issues
+        classified_count = 0
+        for idx in wb.index:
+            if idx in wells.index:
+                wells.loc[idx, "aquifer_type"] = wb.loc[idx, "aquifer_type"]
+                wells.loc[idx, "latitude"] = wb.loc[idx, "latitude"] 
+                wells.loc[idx, "longitude"] = wb.loc[idx, "longitude"]
+                classified_count += 1
+        
+        print(f"DEBUG: Successfully merged {classified_count} wells back to main dataframe")
+        
+        final_aquifer_counts = wells["aquifer_type"].value_counts(dropna=False)
+        print(f"DEBUG: Aquifer types in final wells dataframe:")
+        print(final_aquifer_counts)
+        
+        print(f"Aquifer classification completed successfully")
+        
     except Exception as e:
         # Catch and report any remaining errors
-        print(f"Warning: coordinate processing failed ({e}). Coordinates may be missing.")
+        print(f"Warning: aquifer classification failed ({e}). Setting all to 'Unknown'.")
         import traceback
-        print(f"DEBUG: Full coordinate error traceback:\n{traceback.format_exc()}")
+        print(f"DEBUG: Full aquifer error traceback:\n{traceback.format_exc()}")
         wells["aquifer_type"] = "Unknown"
 else:
-    print("No X/Y coordinates found for aquifer spatial join — aquifer_type set to 'Unknown' for all wells.")
+    print("No X/Y coordinates found for aquifer spatial join – aquifer_type set to 'Unknown' for all wells.")
+
 # ---------------------------
-# 7. Apply Drought Stress Test (NEW)
+# 7. Apply Drought Stress Test
 # ---------------------------
 # Note: DROUGHT_DRAWDOWN_M and WSC_STATION_ID are defined in the config section.
 DEFAULT_DRAWDOWN = DROUGHT_DRAWDOWN_M # Default drawdown (2.0m)
@@ -411,9 +668,8 @@ wells["drying_risk"] = wells["drying_risk_drought"]
 wells = wells.rename(columns={"current_water_level_m": "current_water_level_m_observed"})
 wells = wells.rename(columns={"drought_water_level_m": "stressed_water_level_m"})
 
-
 # ---------------------------
-# 8. Create Google Maps links and location info (RENAMED FROM 7)
+# 8. Create Google Maps links and location info
 # ---------------------------
 def create_google_maps_link(row):
     """Create Google Maps link from address or coordinates"""
@@ -462,19 +718,30 @@ wells["google_maps_link"] = wells.apply(create_google_maps_link, axis=1)
 wells["location_display"] = wells.apply(format_location_display, axis=1)
 
 # ---------------------------
-# 9. Summary stats and CSV export (RENAMED FROM 8)
+# 9. Summary stats and CSV export
 # ---------------------------
 print("\n=== ANALYSIS SUMMARY ===")
 print(f"Total wells analyzed: {len(wells)}")
 print(f"Wells updated from observation data: {updated_count}")
+
+# Add data quality summary
+if "STATIC_WATER_LEVEL_ORIGINAL" in wells.columns:
+    corrected_count = (wells["STATIC_WATER_LEVEL"] != wells["STATIC_WATER_LEVEL_ORIGINAL"]).sum()
+    print(f"Wells with corrected static water levels: {corrected_count}")
+
 risk_counts = wells["drying_risk"].value_counts(dropna=False)
 print("\nRisk distribution:")
 print(risk_counts.to_string())
 
+# Show buffer statistics
+buffer_stats = wells["buffer_m"].describe()
+print(f"\nBuffer statistics (meters):")
+print(buffer_stats)
+
 # Export CSV (include useful columns)
 out_cols = ["WELL_ID", "CIVIC_ADDRESS", "MUNICIPALITY", "location_display", "google_maps_link", 
-            "latitude", "longitude", "DEPTH", "STATIC_WATER_LEVEL", 
-            "current_water_level_m_observed", "drought_drawdown_m", "stressed_water_level_m", # <--- PATCH: ADDED/RENAMED
+            "latitude", "longitude", "DEPTH", "STATIC_WATER_LEVEL", "STATIC_WATER_LEVEL_ORIGINAL",
+            "current_water_level_m_observed", "drought_drawdown_m", "stressed_water_level_m",
             "pump_depth_m", "buffer_m", "drying_risk", "YIELD", "yield_category", "aquifer_type"]
 # only keep existing
 out_cols = [c for c in out_cols if c in wells.columns]
@@ -483,7 +750,7 @@ results.to_csv(output_csv, index=False)
 print(f"\nDetailed results saved to {output_csv}")
 
 # ---------------------------
-# 10. Prepare map data for wells with valid coordinates (NEW)
+# 10. Prepare map data for wells with valid coordinates
 # ---------------------------
 def prepare_map_data(wells_df, max_points=5000):
     """Prepare optimized map data with clustering for large datasets"""
@@ -695,7 +962,7 @@ def prepare_map_data(wells_df, max_points=5000):
 map_wells_data = prepare_map_data(wells)
 
 # ---------------------------
-# 11. Create HTML report (Dashboard Style with DataTables and Interactive Map) (RENAMED FROM 10)
+# 11. Create HTML report (Dashboard Style with DataTables and Interactive Map)
 # ---------------------------
 print("Generating HTML dashboard with interactive map...")
 
@@ -876,7 +1143,9 @@ html_parts.append("""
         <li><strong>pump_depth_m:</strong> An <em>estimated</em> depth of the submersible pump. This is calculated as 80% of the well's total depth, or 2.5m from the bottom, whichever is shallower.</li>
         <li><strong>DEPTH:</strong> The total drilled depth of the well in meters.</li>
         <li><strong>YIELD:</strong> The well's flow rate in Liters per Minute. Wells with very low yield (< 5 L/min) may have their risk category upgraded.</li>
+        <li><strong>STATIC_WATER_LEVEL_ORIGINAL:</strong> The original static water level from the database before data quality corrections were applied.</li>
     </ul>
+    <p><strong>Note:</strong> This script applies automatic data quality corrections to unrealistic water levels. Wells with original static levels > 50m have been adjusted to more realistic values.</p>
   </div>
 </div>
 """)
@@ -1189,3 +1458,16 @@ with open(output_html, "w", encoding="utf-8") as f:
     f.write("\n".join(html_parts))
 
 print(f"Dashboard report with interactive map written to {output_html}")
+print(f"\n=== DATA QUALITY SUMMARY ===")
+if "STATIC_WATER_LEVEL_ORIGINAL" in wells.columns:
+    corrected_wells = (wells["STATIC_WATER_LEVEL"] != wells["STATIC_WATER_LEVEL_ORIGINAL"]).sum()
+    print(f"Wells with data quality corrections applied: {corrected_wells}")
+    
+    if corrected_wells > 0:
+        print(f"Original vs. Corrected Static Water Level Comparison:")
+        print(f"  Original mean: {wells['STATIC_WATER_LEVEL_ORIGINAL'].mean():.1f}m")
+        print(f"  Corrected mean: {wells['STATIC_WATER_LEVEL'].mean():.1f}m")
+        print(f"  Wells with original levels > 100m: {(wells['STATIC_WATER_LEVEL_ORIGINAL'] > 100).sum()}")
+        print(f"  Wells with corrected levels > 100m: {(wells['STATIC_WATER_LEVEL'] > 100).sum()}")
+
+print(f"Analysis complete. Check {output_html} for the interactive dashboard.")
