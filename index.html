@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang='en'><head><meta charset='utf-8'><title>Colchester Well Drying Risk Report</title>
+<html lang='en'><head><meta charset='utf-8'><title>Colchester Multi-Station Well Risk Report</title>
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
@@ -13,6 +13,11 @@ h1,h2 { color:#0b4d78; margin-top:20px; }
 .card { border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,0.08); margin-bottom:20px; }
 .kpi-card { text-align:center; padding:20px; }
 .kpi-value { font-size:1.5rem; font-weight:bold; color:#0b4d78; }
+.drought-status { padding:10px; border-radius:5px; margin-bottom:20px; }
+.drought-severe { background-color:#ffebee; border-left:4px solid #f44336; }
+.drought-moderate { background-color:#fff3e0; border-left:4px solid #ff9800; }
+.drought-normal { background-color:#e8f5e8; border-left:4px solid #4caf50; }
+.drought-default { background-color:#f5f5f5; border-left:4px solid #9e9e9e; }
 .nav-tabs .nav-link.active { background:#0b4d78; color:#fff; }
 .map-link { color:#0b4d78; text-decoration:none; }
 .map-link:hover { text-decoration:underline; }
@@ -82,7 +87,12 @@ table.dataTable thead th { white-space: nowrap; }
 <div class="container-fluid py-4">
 
 <h1 class='mb-3'>Colchester County Well Drying Risk Dashboard</h1>
-<p class='text-muted'>Report generated: 2025-09-28 13:19 | Wells mapped: 3946</p>
+<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-28 13:40 | Wells mapped: 3946</p>
+
+<div class="drought-status drought-severe">
+    <strong>Regional Drought Status:</strong> 🚨 SEVERE DROUGHT CONDITIONS - 67%+ of monitoring stations show critical low flows
+</div>
+
 
 <p>
   <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#help-window" aria-expanded="false" aria-controls="help-window">
@@ -94,36 +104,44 @@ table.dataTable thead th { white-space: nowrap; }
 </p>
 <div class="collapse" id="help-window">
   <div class="card card-body bg-light mb-4">
-    <h4>Understanding the Columns</h4>
-    <p>This report analyzes the risk of private wells running dry based on their construction and water levels.</p>
+    <h4>Understanding the Multi-Station Analysis</h4>
+    <p>This report uses real-time data from multiple Environment Canada hydrometric stations across Colchester County to assess regional drought conditions and apply appropriate stress testing to well risk calculations.</p>
+    
+    <h5>Monitoring Stations:</h5>
     <ul>
-        <li><strong>buffer_m (Buffer in Meters):</strong> This is the most important column. It shows the vertical distance between the current water level and the estimated pump depth. A small or negative number indicates a high risk of the pump drawing air.</li>
-        <li><strong>drying_risk:</strong> A risk category assigned based on the <strong>buffer_m</strong> value:
-            <ul>
-                <li><strong>CRITICAL:</strong> Buffer is negative. The water level is likely below the pump.</li>
-                <li><strong>High risk:</strong> Buffer is less than 2 meters.</li>
-                <li><strong>Moderate risk:</strong> Buffer is between 2 and 5 meters.</li>
-                <li><strong>Low risk:</strong> Buffer is greater than 5 meters.</li>
-            </ul>
-        </li>
-        <li><strong>stressed_water_level_m:</strong> The estimated depth to the water from the ground surface, in meters, **adjusted for potential drought conditions** based on Environment Canada hydrometric data. A larger number means the water is deeper down.</li>
-        <li><strong>current_water_level_m_observed:</strong> The original depth to water (static level or latest observation well reading).</li>
-        <li><strong>drought_drawdown_m:</strong> The amount of additional drawdown (in meters) applied to the water level to stress-test the well under drought conditions.</li>
-        <li><strong>pump_depth_m:</strong> An <em>estimated</em> depth of the submersible pump. This is calculated as 80% of the well's total depth, or 2.5m from the bottom, whichever is shallower.</li>
-        <li><strong>DEPTH:</strong> The total drilled depth of the well in meters.</li>
-        <li><strong>YIELD:</strong> The well's flow rate in Liters per Minute. Wells with very low yield (< 5 L/min) may have their risk category upgraded.</li>
-        <li><strong>STATIC_WATER_LEVEL_ORIGINAL:</strong> The original static water level from the database before data quality corrections were applied.</li>
+        <li><strong>Salmon River near Truro (01EO001):</strong> Central Colchester region</li>
+        <li><strong>Economy River near Economy (01EB001):</strong> North coast region</li>
+        <li><strong>Great Village River at Great Village (01ED002):</strong> North-central region</li>
     </ul>
-    <p><strong>Note:</strong> This script applies automatic data quality corrections to unrealistic water levels. Wells with original static levels > 50m have been adjusted to more realistic values.</p>
+    
+    <h5>Drought Stress Levels:</h5>
+    <ul>
+        <li><strong>SEVERE:</strong> 67%+ stations critical → 4.0m additional drawdown applied</li>
+        <li><strong>MODERATE:</strong> 33-66% stations critical → 3.0m additional drawdown applied</li>
+        <li><strong>NORMAL:</strong> <33% stations critical → 2.0m standard drawdown applied</li>
+    </ul>
+    
+    <h4>Understanding the Columns</h4>
+    <ul>
+        <li><strong>buffer_m (Buffer in Meters):</strong> Vertical distance between stressed water level and pump depth. Negative values indicate critical risk.</li>
+        <li><strong>drying_risk:</strong> Risk category based on buffer after drought stress testing</li>
+        <li><strong>stressed_water_level_m:</strong> Depth to water after applying regional drought drawdown</li>
+        <li><strong>drought_drawdown_m:</strong> Additional drawdown applied based on current surface water conditions</li>
+        <li><strong>current_water_level_m_observed:</strong> Original depth to water before drought stress</li>
+        <li><strong>pump_depth_m:</strong> Estimated pump depth (80% of well depth or 2.5m from bottom)</li>
+        <li><strong>DEPTH:</strong> Total drilled depth of the well</li>
+        <li><strong>YIELD:</strong> Well flow rate in L/min</li>
+    </ul>
+    <p><strong>Note:</strong> This analysis provides a regional approach to drought risk assessment, giving more accurate results than single-station analysis for county-wide groundwater conditions.</p>
   </div>
 </div>
 
 
 <div class="row">
   <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">3946</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">85</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">7</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">75.51</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">87</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">10</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">74.51</div></div></div>
 </div>
 
 
@@ -158,19 +176,19 @@ table.dataTable thead th { white-space: nowrap; }
     </tr>
     <tr>
       <td>Low risk - &gt;5m buffer</td>
-      <td>1114</td>
+      <td>1108</td>
     </tr>
     <tr>
       <td>CRITICAL - Well may be dry</td>
-      <td>85</td>
+      <td>87</td>
     </tr>
     <tr>
       <td>Moderate risk - 2-5m buffer</td>
-      <td>19</td>
+      <td>20</td>
     </tr>
     <tr>
       <td>High risk - &lt;2m buffer</td>
-      <td>7</td>
+      <td>10</td>
     </tr>
   </tbody>
 </table>
@@ -199,16 +217,16 @@ table.dataTable thead th { white-space: nowrap; }
     <tr>
       <th>Bedrock</th>
       <td>69</td>
-      <td>4</td>
-      <td>933</td>
-      <td>14</td>
+      <td>7</td>
+      <td>929</td>
+      <td>15</td>
       <td>2242</td>
     </tr>
     <tr>
       <th>Surficial</th>
-      <td>12</td>
+      <td>14</td>
       <td>3</td>
-      <td>172</td>
+      <td>170</td>
       <td>5</td>
       <td>419</td>
     </tr>
@@ -222,7 +240,7 @@ table.dataTable thead th { white-space: nowrap; }
   <div class="modal-dialog modal-fullscreen-lg-down">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="mapModalLabel">Interactive Well Risk Map</h5>
+        <h5 class="modal-title" id="mapModalLabel">Interactive Well Risk Map - Multi-Station Analysis</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body position-relative">
@@ -232,7 +250,7 @@ table.dataTable thead th { white-space: nowrap; }
         </div>
         <div id="wellMap"></div>
         <div class="map-legend">
-          <strong>Risk Levels:</strong><br>
+          <strong>Risk Levels (Post-Drought Stress):</strong><br>
           <div class="legend-item"><div class="legend-color" style="background-color: red;"></div>Critical</div>
           <div class="legend-item"><div class="legend-color" style="background-color: orange;"></div>High Risk</div>
           <div class="legend-item"><div class="legend-color" style="background-color: yellow;"></div>Moderate Risk</div>
