@@ -82,7 +82,7 @@ table.dataTable thead th { white-space: nowrap; }
 <div class="container-fluid py-4">
 
 <h1 class='mb-3'>Colchester County Well Drying Risk Dashboard</h1>
-<p class='text-muted'>Report generated: 2025-09-27 17:46 | Wells mapped: 12476</p>
+<p class='text-muted'>Report generated: 2025-09-28 13:19 | Wells mapped: 3946</p>
 
 <p>
   <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#help-window" aria-expanded="false" aria-controls="help-window">
@@ -112,16 +112,18 @@ table.dataTable thead th { white-space: nowrap; }
         <li><strong>pump_depth_m:</strong> An <em>estimated</em> depth of the submersible pump. This is calculated as 80% of the well's total depth, or 2.5m from the bottom, whichever is shallower.</li>
         <li><strong>DEPTH:</strong> The total drilled depth of the well in meters.</li>
         <li><strong>YIELD:</strong> The well's flow rate in Liters per Minute. Wells with very low yield (< 5 L/min) may have their risk category upgraded.</li>
+        <li><strong>STATIC_WATER_LEVEL_ORIGINAL:</strong> The original static water level from the database before data quality corrections were applied.</li>
     </ul>
+    <p><strong>Note:</strong> This script applies automatic data quality corrections to unrealistic water levels. Wells with original static levels > 50m have been adjusted to more realistic values.</p>
   </div>
 </div>
 
 
 <div class="row">
-  <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">125860</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">12358</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">187</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">46.02</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">3946</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">85</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">7</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">75.51</div></div></div>
 </div>
 
 
@@ -152,23 +154,23 @@ table.dataTable thead th { white-space: nowrap; }
   <tbody>
     <tr>
       <td>No data</td>
-      <td>102313</td>
-    </tr>
-    <tr>
-      <td>CRITICAL - Well may be dry</td>
-      <td>12358</td>
+      <td>2721</td>
     </tr>
     <tr>
       <td>Low risk - &gt;5m buffer</td>
-      <td>10745</td>
+      <td>1114</td>
+    </tr>
+    <tr>
+      <td>CRITICAL - Well may be dry</td>
+      <td>85</td>
     </tr>
     <tr>
       <td>Moderate risk - 2-5m buffer</td>
-      <td>257</td>
+      <td>19</td>
     </tr>
     <tr>
       <td>High risk - &lt;2m buffer</td>
-      <td>187</td>
+      <td>7</td>
     </tr>
   </tbody>
 </table>
@@ -195,12 +197,20 @@ table.dataTable thead th { white-space: nowrap; }
   </thead>
   <tbody>
     <tr>
-      <th>Unknown</th>
-      <td>12358</td>
-      <td>187</td>
-      <td>10745</td>
-      <td>257</td>
-      <td>102313</td>
+      <th>Bedrock</th>
+      <td>69</td>
+      <td>4</td>
+      <td>933</td>
+      <td>14</td>
+      <td>2242</td>
+    </tr>
+    <tr>
+      <th>Surficial</th>
+      <td>12</td>
+      <td>3</td>
+      <td>172</td>
+      <td>5</td>
+      <td>419</td>
     </tr>
   </tbody>
 </table>
@@ -236,10 +246,10 @@ table.dataTable thead th { white-space: nowrap; }
 
 </div>
 <script> 
-const dtColumns = [{"data": "WELL_ID", "title": "WELL_ID"}, {"data": "location_display", "title": "location_display"}, {"data": "Map Link", "title": "Map Link"}, {"data": "DEPTH", "title": "DEPTH"}, {"data": "STATIC_WATER_LEVEL", "title": "STATIC_WATER_LEVEL"}, {"data": "current_water_level_m_observed", "title": "current_water_level_m_observed"}, {"data": "drought_drawdown_m", "title": "drought_drawdown_m"}, {"data": "stressed_water_level_m", "title": "stressed_water_level_m"}, {"data": "pump_depth_m", "title": "pump_depth_m"}, {"data": "buffer_m", "title": "buffer_m"}, {"data": "drying_risk", "title": "drying_risk"}, {"data": "YIELD", "title": "YIELD"}, {"data": "yield_category", "title": "yield_category"}, {"data": "aquifer_type", "title": "aquifer_type"}]; 
+const dtColumns = [{"data": "WELL_ID", "title": "WELL_ID"}, {"data": "location_display", "title": "location_display"}, {"data": "Map Link", "title": "Map Link"}, {"data": "DEPTH", "title": "DEPTH"}, {"data": "STATIC_WATER_LEVEL", "title": "STATIC_WATER_LEVEL"}, {"data": "STATIC_WATER_LEVEL_ORIGINAL", "title": "STATIC_WATER_LEVEL_ORIGINAL"}, {"data": "current_water_level_m_observed", "title": "current_water_level_m_observed"}, {"data": "drought_drawdown_m", "title": "drought_drawdown_m"}, {"data": "stressed_water_level_m", "title": "stressed_water_level_m"}, {"data": "pump_depth_m", "title": "pump_depth_m"}, {"data": "buffer_m", "title": "buffer_m"}, {"data": "drying_risk", "title": "drying_risk"}, {"data": "YIELD", "title": "YIELD"}, {"data": "yield_category", "title": "yield_category"}, {"data": "aquifer_type", "title": "aquifer_type"}]; 
 const dataJsonFile = 'wells_data.json';
 const mapDataFile = 'wells_map_data.json';
-const mapCenter = [45.32102213123577, -63.10870964073941];
+const mapCenter = [45.25296693161365, -63.50375975185805];
 </script>
 
 <script>
