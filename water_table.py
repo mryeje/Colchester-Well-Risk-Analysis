@@ -1,4 +1,4 @@
-# water_table.py - PATCHED VERSION
+# water_table.py - MULTI-STATION PATCHED VERSION
 import pandas as pd
 import numpy as np
 import geopandas as gpd
@@ -13,7 +13,7 @@ import io
 warnings.filterwarnings('ignore')
 
 print("=== COLCHESTER WELL DRYING RISK ANALYSIS ===")
-print("GeoPandas-enhanced version – HTML report output\n")
+print("GeoPandas-enhanced version with Multi-Station Hydrometric Analysis\n")
 
 # ---------------------------
 # Helper / config
@@ -33,10 +33,32 @@ wgs84 = "EPSG:4326"
 # Assumes a 2.0 meter worst-case drawdown due to drought for wells without detailed time series.
 DROUGHT_DRAWDOWN_M = 2.0
 
-# ECCC Hydrometric Data Integration Configuration (Optional, but highly recommended)
-# ** FINAL PATCH: Using Salmon River near Truro (01EO001) as the secondary, more central station **
-WSC_STATION_ID = "01EO001" 
-# ** PATCH: Use the stable NS_daily_hydrometric.csv file with the correct path **
+# MULTI-STATION HYDROMETRIC DATA CONFIGURATION
+# Major river systems in Colchester County with WSC stations
+COLCHESTER_STATIONS = {
+    "01EO001": {  # Salmon River near Truro
+        "name": "Salmon River near Truro", 
+        "critical_threshold": 1.0,  # m³/s
+        "region": "Central Colchester"
+    },
+    "01EB001": {  # Economy River near Economy  
+        "name": "Economy River near Economy",
+        "critical_threshold": 0.5,  # m³/s (smaller river)
+        "region": "North Colchester"
+    },
+    "01ED002": {  # Great Village River at Great Village
+        "name": "Great Village River at Great Village", 
+        "critical_threshold": 0.8,  # m³/s
+        "region": "North-Central Colchester"
+    }
+}
+
+# Backup configuration if primary stations unavailable
+BACKUP_STATIONS = {
+    "01EF001": "Portapique River near Portapique",  # Backup north coast
+    "01EG001": "French River near French River"    # Backup central
+}
+
 WSC_API_URL = "https://dd.weather.gc.ca/hydrometric/csv/NS/daily/NS_daily_hydrometric.csv"
 
 # ---------------------------
@@ -440,28 +462,22 @@ def classify_risk(buffer):
 wells["drying_risk"] = wells["buffer_m"].apply(classify_risk)
 
 # ---------------------------
-# Helper Function: WSC Data Fetcher
+# MULTI-STATION HYDROMETRIC FUNCTIONS
 # ---------------------------
-def fetch_real_time_discharge(station_id, api_url):
-    """Fetches the current discharge (flow) from the WSC API using the provincial daily file."""
+def fetch_multi_station_discharge(stations_dict, api_url):
+    """Fetches discharge data for multiple stations and returns aggregated drought risk"""
     try:
-        url = api_url
-        
-        print(f"Attempting to fetch provincial daily summary file from: {url}")
-        response = requests.get(url)
+        print(f"Fetching data for {len(stations_dict)} stations...")
+        response = requests.get(api_url)
         
         if response.status_code != 200:
-            print(f"Error fetching WSC provincial data (Status: {response.status_code}).")
+            print(f"Error fetching WSC data (Status: {response.status_code})")
             return None
 
-        # This CSV format has a clean header at row 0
         data = pd.read_csv(io.StringIO(response.text))
+        station_id_col = ' ID'  # Column with leading space
         
-        # ** FINAL PATCH: Use the exact, messy column names from the error report **
-        # The station ID column has a leading space
-        station_id_col = ' ID' 
-        
-        # The Discharge column has French characters (likely corrupted on download)
+        # Find discharge column
         discharge_col = None
         for col in data.columns:
             if 'Discharge' in col and '(cms)' in col:
@@ -469,29 +485,88 @@ def fetch_real_time_discharge(station_id, api_url):
                 break
         
         if station_id_col not in data.columns or discharge_col is None:
-            print(f"Error: Could not find required columns in the WSC CSV. ID column: {' ID' in data.columns}, Discharge column: {discharge_col}")
+            print(f"Error: Required columns not found in WSC data")
             return None
 
-        # 1. Filter by the desired station (ID)
-        station_data = data[data[station_id_col] == station_id]
+        station_results = {}
+        critical_stations = 0
+        total_stations = 0
         
-        if station_data.empty:
-            print(f"Station {station_id} not found in the latest provincial daily data file.")
+        for station_id, station_info in stations_dict.items():
+            station_data = data[data[station_id_col] == station_id]
+            
+            if station_data.empty:
+                print(f"Station {station_id} ({station_info['name']}) not found in data")
+                continue
+                
+            try:
+                latest_flow = pd.to_numeric(station_data[discharge_col], errors='coerce').dropna().iloc[-1]
+                threshold = station_info['critical_threshold']
+                is_critical = latest_flow < threshold
+                
+                station_results[station_id] = {
+                    'flow': latest_flow,
+                    'threshold': threshold, 
+                    'critical': is_critical,
+                    'name': station_info['name']
+                }
+                
+                if is_critical:
+                    critical_stations += 1
+                total_stations += 1
+                
+                status = "CRITICAL" if is_critical else "Normal"
+                print(f"  {station_info['name']}: {latest_flow:.2f} m³/s ({status})")
+                
+            except Exception as e:
+                print(f"Error processing station {station_id}: {e}")
+                continue
+        
+        if total_stations == 0:
             return None
-
-        # 2. Extract the Flow value from the Discharge column
-        # Note: Daily file does not have a 'TYPE' column, so we just use the discharge column
+            
+        # Calculate regional drought risk
+        critical_ratio = critical_stations / total_stations
+        print(f"\nRegional Analysis: {critical_stations}/{total_stations} stations critical ({critical_ratio:.1%})")
         
-        # The last row should be the most recent day
-        latest_flow = pd.to_numeric(station_data[discharge_col], errors='coerce').dropna().iloc[-1]
+        return {
+            'stations': station_results,
+            'critical_ratio': critical_ratio,
+            'total_stations': total_stations
+        }
         
-        # The value is the daily mean flow in m^3/s (cms = cubic meters per second).
-        print(f"Successfully retrieved latest daily mean flow for station {station_id}: {latest_flow} m³/s")
-        return latest_flow
-
     except Exception as e:
-        print(f"Error processing WSC data: {e}. Check API URL and Station ID.")
+        print(f"Error in multi-station analysis: {e}")
         return None
+
+def apply_regional_drought_stress(wells_df, station_data):
+    """Apply drought stress based on regional hydrometric conditions"""
+    
+    if station_data is None:
+        # Fallback to default
+        wells_df["drought_drawdown_m"] = DROUGHT_DRAWDOWN_M
+        print(f"No station data - applying default {DROUGHT_DRAWDOWN_M}m stress test")
+        return "DEFAULT"
+    
+    critical_ratio = station_data['critical_ratio']
+    
+    # Graduated drought stress based on regional conditions
+    if critical_ratio >= 0.67:  # 67%+ of stations critical
+        drought_multiplier = 2.0  # Severe regional drought
+        stress_level = "SEVERE"
+    elif critical_ratio >= 0.33:  # 33-66% of stations critical  
+        drought_multiplier = 1.5  # Moderate regional drought
+        stress_level = "MODERATE"
+    else:  # <33% critical
+        drought_multiplier = 1.0  # Normal conditions
+        stress_level = "NORMAL"
+    
+    wells_df["drought_drawdown_m"] = DROUGHT_DRAWDOWN_M * drought_multiplier
+    
+    print(f"{stress_level} regional drought conditions detected")
+    print(f"Applying {DROUGHT_DRAWDOWN_M * drought_multiplier:.1f}m drought stress test")
+    
+    return stress_level
 
 # ---------------------------
 # 5. Yield adjustment if present
@@ -505,11 +580,6 @@ if "YIELD" in wells.columns:
     )
     low_yield_mask = (wells["YIELD"] < 5) & (wells["YIELD"].notna())
     wells.loc[low_yield_mask & (wells["drying_risk"].str.contains("Moderate")), "drying_risk"] = "High risk - Low yield well"
-
-# ADD THIS IMPORT at the top of your script (after the other imports):
-import os
-
-# REPLACE the entire aquifer classification section (around line 350-450) with this:
 
 # ---------------------------
 # 6. Aquifer classification using GeoPandas (if coords and shapefiles exist)
@@ -627,44 +697,25 @@ else:
     print("No X/Y coordinates found for aquifer spatial join – aquifer_type set to 'Unknown' for all wells.")
 
 # ---------------------------
-# 7. Apply Drought Stress Test
+# 7. Apply Multi-Station Drought Stress Test
 # ---------------------------
-# Note: DROUGHT_DRAWDOWN_M and WSC_STATION_ID are defined in the config section.
-DEFAULT_DRAWDOWN = DROUGHT_DRAWDOWN_M # Default drawdown (2.0m)
 
-# 1. Fetch Real-Time Surface Water Data
-current_flow_rate = fetch_real_time_discharge(WSC_STATION_ID, WSC_API_URL)
+# Fetch Multi-Station Surface Water Data
+station_data = fetch_multi_station_discharge(COLCHESTER_STATIONS, WSC_API_URL)
+drought_level = apply_regional_drought_stress(wells, station_data)
 
-if current_flow_rate is not None:
-    # Simplified logic for initial integration 
-    # Placeholder: Assuming a critical threshold of 1.0 m³/s for the Salmon River near Truro.
-    CRITICAL_FLOW_THRESHOLD = 1.0 
-    
-    if current_flow_rate < CRITICAL_FLOW_THRESHOLD:
-        # If streamflow is critically low, apply a higher, worst-case drawdown.
-        wells["drought_drawdown_m"] = DEFAULT_DRAWDOWN * 1.5 
-        print(f"CRITICAL surface water flow detected ({current_flow_rate} m³/s). Applying {DEFAULT_DRAWDOWN * 1.5}m extreme drought stress.")
-    else:
-        # If flow is near normal, use the default conservative drawdown.
-        wells["drought_drawdown_m"] = DEFAULT_DRAWDOWN
-        print(f"Normal surface water flow ({current_flow_rate} m³/s). Applying {DEFAULT_DRAWDOWN}m default stress test.")
-else:
-    # If API call fails, fall back to the safest default.
-    wells["drought_drawdown_m"] = DEFAULT_DRAWDOWN
-    print(f"WSC data unavailable or failed to parse. Applying {DEFAULT_DRAWDOWN}m safe default stress test.")
-
-# 2. Calculate Stressed Water Level
+# Calculate Stressed Water Level
 wells["drought_water_level_m"] = wells["current_water_level_m"] + wells["drought_drawdown_m"]
 
-# 3. Recalculate Buffer and Risk (The final risk output is now the STRESSED risk)
+# Recalculate Buffer and Risk (The final risk output is now the STRESSED risk)
 wells["buffer_m_drought"] = wells["pump_depth_m"] - wells["drought_water_level_m"]
 wells["drying_risk_drought"] = wells["buffer_m_drought"].apply(classify_risk)
 
-# 4. Overwrite Final Columns
+# Overwrite Final Columns
 wells["buffer_m"] = wells["buffer_m_drought"]
 wells["drying_risk"] = wells["drying_risk_drought"]
 
-# 5. Rename columns for clarity in output
+# Rename columns for clarity in output
 wells = wells.rename(columns={"current_water_level_m": "current_water_level_m_observed"})
 wells = wells.rename(columns={"drought_water_level_m": "stressed_water_level_m"})
 
@@ -720,9 +771,15 @@ wells["location_display"] = wells.apply(format_location_display, axis=1)
 # ---------------------------
 # 9. Summary stats and CSV export
 # ---------------------------
-print("\n=== ANALYSIS SUMMARY ===")
+print("\n=== MULTI-STATION ANALYSIS SUMMARY ===")
 print(f"Total wells analyzed: {len(wells)}")
 print(f"Wells updated from observation data: {updated_count}")
+print(f"Regional drought level: {drought_level}")
+
+# Add drought stress summary
+drought_summary = wells["drought_drawdown_m"].describe()
+print(f"\nDrought stress applied (meters):")
+print(drought_summary)
 
 # Add data quality summary
 if "STATIC_WATER_LEVEL_ORIGINAL" in wells.columns:
@@ -730,12 +787,12 @@ if "STATIC_WATER_LEVEL_ORIGINAL" in wells.columns:
     print(f"Wells with corrected static water levels: {corrected_count}")
 
 risk_counts = wells["drying_risk"].value_counts(dropna=False)
-print("\nRisk distribution:")
+print("\nRisk distribution (after drought stress):")
 print(risk_counts.to_string())
 
 # Show buffer statistics
 buffer_stats = wells["buffer_m"].describe()
-print(f"\nBuffer statistics (meters):")
+print(f"\nBuffer statistics (meters after drought stress):")
 print(buffer_stats)
 
 # Export CSV (include useful columns)
@@ -942,6 +999,7 @@ def prepare_map_data(wells_df, max_points=5000):
             <strong>Well Depth:</strong> {safe_format(well.get('DEPTH'), '{}m')}<br>
             <strong>Aquifer:</strong> {safe_format(well.get('aquifer_type'), default='Unknown')}<br>
             <strong>Yield:</strong> {safe_format(well.get('YIELD'), '{} L/min')}<br>
+            <strong>Drought Stress:</strong> {safe_format(well.get('drought_drawdown_m'), '{:.1f}m')}<br>
             <strong>Coordinates:</strong> {well['latitude']:.4f}, {well['longitude']:.4f}<br>
         </div>
         """
@@ -964,7 +1022,7 @@ map_wells_data = prepare_map_data(wells)
 # ---------------------------
 # 11. Create HTML report (Dashboard Style with DataTables and Interactive Map)
 # ---------------------------
-print("Generating HTML dashboard with interactive map...")
+print("Generating HTML dashboard with multi-station analysis...")
 
 # === DATA PREPARATION FOR HTML ===
 
@@ -972,22 +1030,21 @@ print("Generating HTML dashboard with interactive map...")
 all_wells_display = results.copy()
 if 'google_maps_link' in all_wells_display.columns:
     all_wells_display['Map Link'] = all_wells_display['google_maps_link'].apply(
-        lambda x: f'<a href="{x}" target="_blank" class="map-link">🔍 Map</a>' if x else '—'
+        lambda x: f'<a href="{x}" target="_blank" class="map-link">🗺️ Map</a>' if x else '—'
     )
     # Define columns for the final table, removing originals used for the map link
     drop_cols = ['google_maps_link', 'CIVIC_ADDRESS', 'MUNICIPALITY', 'latitude', 'longitude']
     
-    # --- THIS IS THE CORRECTED LINE from the previous request ---
     display_cols = ['WELL_ID', 'location_display', 'Map Link'] + [c for c in all_wells_display.columns if c not in drop_cols + ['WELL_ID', 'location_display', 'Map Link']]
     
     all_wells_display = all_wells_display[display_cols]
 
-# *** Convert the full dataset to JSON ***
+# Convert the full dataset to JSON
 all_wells_json = all_wells_display.to_json(orient="records")
-# *** Create the column definitions for DataTables ***
+# Create the column definitions for DataTables
 datatables_columns = json.dumps([{"data": col, "title": col} for col in all_wells_display.columns])
 
-# ** PATCH: Save the data payload separately to keep the HTML file small **
+# Save the data payload separately to keep the HTML file small
 data_json_file = "wells_data.json"
 with open(data_json_file, "w", encoding="utf-8") as f:
     f.write(all_wells_json)
@@ -1024,7 +1081,7 @@ else:
 
 html_parts = []
 html_parts.append("<!doctype html>")
-html_parts.append("<html lang='en'><head><meta charset='utf-8'><title>Colchester Well Drying Risk Report</title>")
+html_parts.append("<html lang='en'><head><meta charset='utf-8'><title>Colchester Multi-Station Well Risk Report</title>")
 
 # CSS and JS libraries
 html_parts.append(f"""
@@ -1040,6 +1097,11 @@ h1,h2 {{ color:#0b4d78; margin-top:20px; }}
 .card {{ border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,0.08); margin-bottom:20px; }}
 .kpi-card {{ text-align:center; padding:20px; }}
 .kpi-value {{ font-size:1.5rem; font-weight:bold; color:#0b4d78; }}
+.drought-status {{ padding:10px; border-radius:5px; margin-bottom:20px; }}
+.drought-severe {{ background-color:#ffebee; border-left:4px solid #f44336; }}
+.drought-moderate {{ background-color:#fff3e0; border-left:4px solid #ff9800; }}
+.drought-normal {{ background-color:#e8f5e8; border-left:4px solid #4caf50; }}
+.drought-default {{ background-color:#f5f5f5; border-left:4px solid #9e9e9e; }}
 .nav-tabs .nav-link.active {{ background:#0b4d78; color:#fff; }}
 .map-link {{ color:#0b4d78; text-decoration:none; }}
 .map-link:hover {{ text-decoration:underline; }}
@@ -1109,11 +1171,34 @@ table.dataTable thead th {{ white-space: nowrap; }}
 <div class="container-fluid py-4">
 """)
 
-# Title + timestamp
+# Title + timestamp with multi-station indicator
 html_parts.append(f"<h1 class='mb-3'>Colchester County Well Drying Risk Dashboard</h1>")
-html_parts.append(f"<p class='text-muted'>Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} | Wells mapped: {len(map_wells_data)}</p>")
+html_parts.append(f"<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} | Wells mapped: {len(map_wells_data)}</p>")
 
-# --- NEW: EXPANDABLE HELP WINDOW HTML ---
+# Add drought status indicator
+drought_class_map = {
+    "SEVERE": "drought-severe",
+    "MODERATE": "drought-moderate", 
+    "NORMAL": "drought-normal",
+    "DEFAULT": "drought-default"
+}
+drought_css_class = drought_class_map.get(drought_level, "drought-default")
+
+drought_messages = {
+    "SEVERE": "🚨 SEVERE DROUGHT CONDITIONS - 67%+ of monitoring stations show critical low flows",
+    "MODERATE": "⚠️ MODERATE DROUGHT CONDITIONS - 33-66% of monitoring stations show critical low flows", 
+    "NORMAL": "✅ NORMAL SURFACE WATER CONDITIONS - Wells tested under standard drought stress",
+    "DEFAULT": "ℹ️ HYDROMETRIC DATA UNAVAILABLE - Conservative drought assumptions applied"
+}
+drought_message = drought_messages.get(drought_level, "ℹ️ HYDROMETRIC DATA UNAVAILABLE - Conservative drought assumptions applied")
+
+html_parts.append(f"""
+<div class="drought-status {drought_css_class}">
+    <strong>Regional Drought Status:</strong> {drought_message}
+</div>
+""")
+
+# Expandable help window
 html_parts.append("""
 <p>
   <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#help-window" aria-expanded="false" aria-controls="help-window">
@@ -1125,27 +1210,35 @@ html_parts.append("""
 </p>
 <div class="collapse" id="help-window">
   <div class="card card-body bg-light mb-4">
-    <h4>Understanding the Columns</h4>
-    <p>This report analyzes the risk of private wells running dry based on their construction and water levels.</p>
+    <h4>Understanding the Multi-Station Analysis</h4>
+    <p>This report uses real-time data from multiple Environment Canada hydrometric stations across Colchester County to assess regional drought conditions and apply appropriate stress testing to well risk calculations.</p>
+    
+    <h5>Monitoring Stations:</h5>
     <ul>
-        <li><strong>buffer_m (Buffer in Meters):</strong> This is the most important column. It shows the vertical distance between the current water level and the estimated pump depth. A small or negative number indicates a high risk of the pump drawing air.</li>
-        <li><strong>drying_risk:</strong> A risk category assigned based on the <strong>buffer_m</strong> value:
-            <ul>
-                <li><strong>CRITICAL:</strong> Buffer is negative. The water level is likely below the pump.</li>
-                <li><strong>High risk:</strong> Buffer is less than 2 meters.</li>
-                <li><strong>Moderate risk:</strong> Buffer is between 2 and 5 meters.</li>
-                <li><strong>Low risk:</strong> Buffer is greater than 5 meters.</li>
-            </ul>
-        </li>
-        <li><strong>stressed_water_level_m:</strong> The estimated depth to the water from the ground surface, in meters, **adjusted for potential drought conditions** based on Environment Canada hydrometric data. A larger number means the water is deeper down.</li>
-        <li><strong>current_water_level_m_observed:</strong> The original depth to water (static level or latest observation well reading).</li>
-        <li><strong>drought_drawdown_m:</strong> The amount of additional drawdown (in meters) applied to the water level to stress-test the well under drought conditions.</li>
-        <li><strong>pump_depth_m:</strong> An <em>estimated</em> depth of the submersible pump. This is calculated as 80% of the well's total depth, or 2.5m from the bottom, whichever is shallower.</li>
-        <li><strong>DEPTH:</strong> The total drilled depth of the well in meters.</li>
-        <li><strong>YIELD:</strong> The well's flow rate in Liters per Minute. Wells with very low yield (< 5 L/min) may have their risk category upgraded.</li>
-        <li><strong>STATIC_WATER_LEVEL_ORIGINAL:</strong> The original static water level from the database before data quality corrections were applied.</li>
+        <li><strong>Salmon River near Truro (01EO001):</strong> Central Colchester region</li>
+        <li><strong>Economy River near Economy (01EB001):</strong> North coast region</li>
+        <li><strong>Great Village River at Great Village (01ED002):</strong> North-central region</li>
     </ul>
-    <p><strong>Note:</strong> This script applies automatic data quality corrections to unrealistic water levels. Wells with original static levels > 50m have been adjusted to more realistic values.</p>
+    
+    <h5>Drought Stress Levels:</h5>
+    <ul>
+        <li><strong>SEVERE:</strong> 67%+ stations critical → 4.0m additional drawdown applied</li>
+        <li><strong>MODERATE:</strong> 33-66% stations critical → 3.0m additional drawdown applied</li>
+        <li><strong>NORMAL:</strong> <33% stations critical → 2.0m standard drawdown applied</li>
+    </ul>
+    
+    <h4>Understanding the Columns</h4>
+    <ul>
+        <li><strong>buffer_m (Buffer in Meters):</strong> Vertical distance between stressed water level and pump depth. Negative values indicate critical risk.</li>
+        <li><strong>drying_risk:</strong> Risk category based on buffer after drought stress testing</li>
+        <li><strong>stressed_water_level_m:</strong> Depth to water after applying regional drought drawdown</li>
+        <li><strong>drought_drawdown_m:</strong> Additional drawdown applied based on current surface water conditions</li>
+        <li><strong>current_water_level_m_observed:</strong> Original depth to water before drought stress</li>
+        <li><strong>pump_depth_m:</strong> Estimated pump depth (80% of well depth or 2.5m from bottom)</li>
+        <li><strong>DEPTH:</strong> Total drilled depth of the well</li>
+        <li><strong>YIELD:</strong> Well flow rate in L/min</li>
+    </ul>
+    <p><strong>Note:</strong> This analysis provides a regional approach to drought risk assessment, giving more accurate results than single-station analysis for county-wide groundwater conditions.</p>
   </div>
 </div>
 """)
@@ -1160,7 +1253,7 @@ html_parts.append(f"""
 </div>
 """)
 
-# Tabs - MODIFIED: Remove 'Top 20' and 'All Wells' tabs, make 'All Wells' the default view
+# Tabs
 html_parts.append("""
 <ul class="nav nav-tabs" id="reportTabs" role="tablist">
   <li class="nav-item" role="presentation">
@@ -1176,7 +1269,7 @@ html_parts.append("""
 <div class="tab-content mt-3">
 """)
 
-# Tab: All Wells - MODIFIED: Set to show active/main content
+# Tab: All Wells
 html_parts.append("<div class='tab-pane fade show active' id='all' role='tabpanel' aria-labelledby='all-tab'>")
 html_parts.append('<div class="table-responsive"><table id="all_wells_table" class="table table-striped table-bordered" style="width:100%"></table></div>')
 html_parts.append("</div>")
@@ -1203,7 +1296,7 @@ html_parts.append(f"""
   <div class="modal-dialog modal-fullscreen-lg-down">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="mapModalLabel">Interactive Well Risk Map</h5>
+        <h5 class="modal-title" id="mapModalLabel">Interactive Well Risk Map - Multi-Station Analysis</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body position-relative">
@@ -1213,7 +1306,7 @@ html_parts.append(f"""
         </div>
         <div id="wellMap"></div>
         <div class="map-legend">
-          <strong>Risk Levels:</strong><br>
+          <strong>Risk Levels (Post-Drought Stress):</strong><br>
           <div class="legend-item"><div class="legend-color" style="background-color: red;"></div>Critical</div>
           <div class="legend-item"><div class="legend-color" style="background-color: orange;"></div>High Risk</div>
           <div class="legend-item"><div class="legend-color" style="background-color: yellow;"></div>Moderate Risk</div>
@@ -1228,7 +1321,7 @@ html_parts.append(f"""
 
 html_parts.append("</div>") # end container
 
-# Inject column definitions (small) and define the data file paths
+# Inject column definitions and define the data file paths
 html_parts.append(f"""<script> 
 const dtColumns = {datatables_columns}; 
 const dataJsonFile = '{data_json_file}';
@@ -1236,7 +1329,7 @@ const mapDataFile = '{map_data_json_file}';
 const mapCenter = [{map_center_lat}, {map_center_lng}];
 </script>""")
 
-# Updated DataTables and Map initialization script
+# DataTables and Map initialization script (same as before)
 html_parts.append("""
 <script>
 let map = null;
@@ -1457,8 +1550,8 @@ html_parts.append("</body></html>")
 with open(output_html, "w", encoding="utf-8") as f:
     f.write("\n".join(html_parts))
 
-print(f"Dashboard report with interactive map written to {output_html}")
-print(f"\n=== DATA QUALITY SUMMARY ===")
+print(f"Multi-station dashboard report written to {output_html}")
+print(f"\n=== MULTI-STATION ANALYSIS COMPLETE ===")
 if "STATIC_WATER_LEVEL_ORIGINAL" in wells.columns:
     corrected_wells = (wells["STATIC_WATER_LEVEL"] != wells["STATIC_WATER_LEVEL_ORIGINAL"]).sum()
     print(f"Wells with data quality corrections applied: {corrected_wells}")
@@ -1470,4 +1563,22 @@ if "STATIC_WATER_LEVEL_ORIGINAL" in wells.columns:
         print(f"  Wells with original levels > 100m: {(wells['STATIC_WATER_LEVEL_ORIGINAL'] > 100).sum()}")
         print(f"  Wells with corrected levels > 100m: {(wells['STATIC_WATER_LEVEL'] > 100).sum()}")
 
-print(f"Analysis complete. Check {output_html} for the interactive dashboard.")
+print(f"\n=== REGIONAL DROUGHT ASSESSMENT SUMMARY ===")
+print(f"Drought assessment method: Multi-station hydrometric analysis")
+print(f"Stations monitored: {len(COLCHESTER_STATIONS)}")
+print(f"Regional drought level: {drought_level}")
+
+if station_data:
+    print(f"Station results:")
+    for station_id, result in station_data['stations'].items():
+        status = "CRITICAL" if result['critical'] else "Normal"
+        print(f"  {result['name']}: {result['flow']:.2f} m³/s ({status})")
+    print(f"Critical ratio: {station_data['critical_ratio']:.1%}")
+
+drought_stats = wells["drought_drawdown_m"].describe()
+print(f"\nDrought stress statistics:")
+print(f"  Mean additional drawdown: {drought_stats['mean']:.1f}m")
+print(f"  Max additional drawdown: {drought_stats['max']:.1f}m")
+print(f"  Wells receiving enhanced stress: {(wells['drought_drawdown_m'] > DROUGHT_DRAWDOWN_M).sum()}")
+
+print(f"\nAnalysis complete. Check {output_html} for the interactive multi-station dashboard.")
