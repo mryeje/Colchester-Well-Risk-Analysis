@@ -1,23 +1,76 @@
 <!doctype html>
-<html lang='en'><head><meta charset='utf-8'><title>Colchester Well Drying Risk Report</title>
+<html lang='en'><head><meta charset='utf-8'><title>Colchester Multi-Station Well Risk Report</title>
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <style>
 body { background:#f8fafc; color:#111; }
 h1,h2 { color:#0b4d78; margin-top:20px; }
 .card { border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,0.08); margin-bottom:20px; }
 .kpi-card { text-align:center; padding:20px; }
 .kpi-value { font-size:1.5rem; font-weight:bold; color:#0b4d78; }
+.drought-status { padding:10px; border-radius:5px; margin-bottom:20px; }
+.drought-severe { background-color:#ffebee; border-left:4px solid #f44336; }
+.drought-moderate { background-color:#fff3e0; border-left:4px solid #ff9800; }
+.drought-normal { background-color:#e8f5e8; border-left:4px solid #4caf50; }
+.drought-default { background-color:#f5f5f5; border-left:4px solid #9e9e9e; }
 .nav-tabs .nav-link.active { background:#0b4d78; color:#fff; }
 .map-link { color:#0b4d78; text-decoration:none; }
 .map-link:hover { text-decoration:underline; }
 .dataTables_wrapper .dt-buttons { margin-bottom:10px; }
 table.dataTable thead th { white-space: nowrap; }
-/* --- NEW CSS FOR HELP WINDOW --- */
+
+/* Map Modal Styles */
+#mapModal .modal-dialog { max-width: 95vw; }
+#mapModal .modal-body { padding: 0; }
+#wellMap { height: 80vh; width: 100%; }
+
+/* Map Controls */
+.map-controls { 
+    position: absolute; 
+    top: 10px; 
+    right: 10px; 
+    z-index: 1000; 
+    background: white; 
+    padding: 10px; 
+    border-radius: 5px; 
+    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+}
+.map-controls label { margin-right: 10px; font-size: 0.9rem; }
+.map-legend { 
+    position: absolute; 
+    bottom: 20px; 
+    right: 10px; 
+    z-index: 1000; 
+    background: white; 
+    padding: 10px; 
+    border-radius: 5px; 
+    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+    font-size: 0.8rem;
+}
+.legend-item { display: flex; align-items: center; margin-bottom: 3px; }
+.legend-color { width: 12px; height: 12px; border-radius: 50%; margin-right: 5px; }
+
+/* Help window styles */
 #help-window .card-body { font-size: 0.9rem; }
 #help-window .card-body ul { padding-left: 20px; }
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .map-controls { 
+        position: relative; 
+        margin-bottom: 10px; 
+    }
+    .map-legend {
+        position: relative;
+        margin-top: 10px;
+    }
+    #wellMap { height: 60vh; }
+}
 </style>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -28,56 +81,73 @@ table.dataTable thead th { white-space: nowrap; }
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 </head><body>
 <div class="container-fluid py-4">
 
 <h1 class='mb-3'>Colchester County Well Drying Risk Dashboard</h1>
-<p class='text-muted'>Report generated: 2025-09-26 15:17</p>
+<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-28 16:25 | Wells mapped: 5000</p>
+
+<div class="drought-status drought-severe">
+    <strong>Regional Drought Status:</strong> 🚨 SEVERE DROUGHT CONDITIONS - 67%+ of monitoring stations show critical low flows
+</div>
+
 
 <p>
   <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#help-window" aria-expanded="false" aria-controls="help-window">
     How to Read This Report 📖
   </button>
+  <button class="btn btn-primary btn-sm ms-2" type="button" data-bs-toggle="modal" data-bs-target="#mapModal">
+    🗺️ View Interactive Map
+  </button>
 </p>
 <div class="collapse" id="help-window">
   <div class="card card-body bg-light mb-4">
-    <h4>Understanding the Columns</h4>
-    <p>This report analyzes the risk of private wells running dry based on their construction and water levels.</p>
+    <h4>Understanding the Multi-Station Analysis</h4>
+    <p>This report uses real-time data from multiple Environment Canada hydrometric stations across Colchester County to assess regional drought conditions and apply appropriate stress testing to well risk calculations.</p>
+    
+    <h5>Monitoring Stations:</h5>
     <ul>
-        <li><strong>buffer_m (Buffer in Meters):</strong> This is the most important column. It shows the vertical distance between the current water level and the estimated pump depth. A small or negative number indicates a high risk of the pump drawing air.</li>
-        <li><strong>drying_risk:</strong> A risk category assigned based on the <strong>buffer_m</strong> value:
-            <ul>
-                <li><strong>CRITICAL:</strong> Buffer is negative. The water level is likely below the pump.</li>
-                <li><strong>High risk:</strong> Buffer is less than 2 meters.</li>
-                <li><strong>Moderate risk:</strong> Buffer is between 2 and 5 meters.</li>
-                <li><strong>Low risk:</strong> Buffer is greater than 5 meters.</li>
-            </ul>
-        </li>
-        <li><strong>stressed_water_level_m:</strong> The estimated depth to the water from the ground surface, in meters, **adjusted for potential drought conditions** based on Environment Canada hydrometric data. A larger number means the water is deeper down.</li>
-        <li><strong>current_water_level_m_observed:</strong> The original depth to water (static level or latest observation well reading).</li>
-        <li><strong>drought_drawdown_m:</strong> The amount of additional drawdown (in meters) applied to the water level to stress-test the well under drought conditions.</li>
-        <li><strong>pump_depth_m:</strong> An <em>estimated</em> depth of the submersible pump. This is calculated as 80% of the well's total depth, or 2.5m from the bottom, whichever is shallower.</li>
-        <li><strong>DEPTH:</strong> The total drilled depth of the well in meters.</li>
-        <li><strong>YIELD:</strong> The well's flow rate in Liters per Minute. Wells with very low yield (< 5 L/min) may have their risk category upgraded.</li>
+        <li><strong>Salmon River near Truro (01EO001):</strong> Central Colchester region</li>
+        <li><strong>Economy River near Economy (01EB001):</strong> North coast region</li>
+        <li><strong>Great Village River at Great Village (01ED002):</strong> North-central region</li>
     </ul>
+    
+    <h5>Drought Stress Levels:</h5>
+    <ul>
+        <li><strong>SEVERE:</strong> 67%+ stations critical → 4.0m additional drawdown applied</li>
+        <li><strong>MODERATE:</strong> 33-66% stations critical → 3.0m additional drawdown applied</li>
+        <li><strong>NORMAL:</strong> <33% stations critical → 2.0m standard drawdown applied</li>
+    </ul>
+    
+    <h4>Understanding the Columns</h4>
+    <ul>
+        <li><strong>buffer_m (Buffer in Meters):</strong> Vertical distance between stressed water level and pump depth. Negative values indicate critical risk.</li>
+        <li><strong>drying_risk:</strong> Risk category based on buffer after drought stress testing</li>
+        <li><strong>stressed_water_level_m:</strong> Depth to water after applying regional drought drawdown</li>
+        <li><strong>drought_drawdown_m:</strong> Additional drawdown applied based on current surface water conditions</li>
+        <li><strong>current_water_level_m_observed:</strong> Original depth to water before drought stress</li>
+        <li><strong>pump_depth_m:</strong> Estimated pump depth (80% of well depth or 2.5m from bottom)</li>
+        <li><strong>DEPTH:</strong> Total drilled depth of the well</li>
+        <li><strong>YIELD:</strong> Well flow rate in L/min</li>
+    </ul>
+    <p><strong>Note:</strong> This analysis provides a regional approach to drought risk assessment, giving more accurate results than single-station analysis for county-wide groundwater conditions.</p>
   </div>
 </div>
 
 
 <div class="row">
-  <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">125860</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">12358</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">187</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">46.02</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">9012</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">1454</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">24</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">36.31</div></div></div>
 </div>
 
 
 <ul class="nav nav-tabs" id="reportTabs" role="tablist">
   <li class="nav-item" role="presentation">
-    <button class="nav-link active" id="top20-tab" data-bs-toggle="tab" data-bs-target="#top20" type="button" role="tab">Top 20 At-Risk</button>
-  </li>
-  <li class="nav-item" role="presentation">
-    <button class="nav-link" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab">All Wells</button>
+    <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-selected="true">All Wells</button>
   </li>
   <li class="nav-item" role="presentation">
     <button class="nav-link" id="dist-tab" data-bs-toggle="tab" data-bs-target="#dist" type="button" role="tab">Risk Distribution</button>
@@ -88,354 +158,10 @@ table.dataTable thead th { white-space: nowrap; }
 </ul>
 <div class="tab-content mt-3">
 
-<div class='tab-pane fade show active' id='top20' role='tabpanel'>
-<table border="1" class="dataframe table table-striped table-bordered" id="top20_table">
-  <thead>
-    <tr style="text-align: right;">
-      <th>WELL_ID</th>
-      <th>location_display</th>
-      <th>Map Link</th>
-      <th>DEPTH</th>
-      <th>STATIC_WATER_LEVEL</th>
-      <th>current_water_level_m_observed</th>
-      <th>drought_drawdown_m</th>
-      <th>stressed_water_level_m</th>
-      <th>pump_depth_m</th>
-      <th>buffer_m</th>
-      <th>drying_risk</th>
-      <th>YIELD</th>
-      <th>yield_category</th>
-      <th>aquifer_type</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>180407</td>
-      <td>8 HONEYCRISP DRIVE</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=8 HONEYCRISP DRIVE, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>30.0</td>
-      <td>301.0</td>
-      <td>301.0</td>
-      <td>3.0</td>
-      <td>304.0</td>
-      <td>24.0</td>
-      <td>-280.0</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>10.00</td>
-      <td>Adequate yield (≥10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>770123</td>
-      <td>RR#1</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=RR#1, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>30.0</td>
-      <td>270.0</td>
-      <td>270.0</td>
-      <td>3.0</td>
-      <td>273.0</td>
-      <td>24.0</td>
-      <td>-249.0</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>10.00</td>
-      <td>Adequate yield (≥10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>130468</td>
-      <td>3231 HIGHWAY #359, HALLS HARBOUR</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=3231 HIGHWAY #359, HALLS HARBOUR, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>130.0</td>
-      <td>256.0</td>
-      <td>256.0</td>
-      <td>3.0</td>
-      <td>259.0</td>
-      <td>104.0</td>
-      <td>-155.0</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>3.50</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>730123</td>
-      <td>Location unknown</td>
-      <td>—</td>
-      <td>30.0</td>
-      <td>170.0</td>
-      <td>170.0</td>
-      <td>3.0</td>
-      <td>173.0</td>
-      <td>24.0</td>
-      <td>-149.0</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>4.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>660948</td>
-      <td>Location unknown</td>
-      <td>—</td>
-      <td>10.0</td>
-      <td>125.0</td>
-      <td>125.0</td>
-      <td>3.0</td>
-      <td>128.0</td>
-      <td>7.5</td>
-      <td>-120.5</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>2.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>752173</td>
-      <td>PROSPECT BAY</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=PROSPECT BAY, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>12.0</td>
-      <td>120.0</td>
-      <td>120.0</td>
-      <td>3.0</td>
-      <td>123.0</td>
-      <td>9.5</td>
-      <td>-113.5</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>6.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>71848</td>
-      <td>HEATHERGLEN DRIVE, BEAVER BANK, HRM</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=HEATHERGLEN DRIVE, BEAVER BANK, HRM, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>0.0</td>
-      <td>100.0</td>
-      <td>100.0</td>
-      <td>3.0</td>
-      <td>103.0</td>
-      <td>-2.5</td>
-      <td>-105.5</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>1.50</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>200918</td>
-      <td>98 MAPLE COURT</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=98 MAPLE COURT, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>130.0</td>
-      <td>201.0</td>
-      <td>201.0</td>
-      <td>3.0</td>
-      <td>204.0</td>
-      <td>104.0</td>
-      <td>-100.0</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>0.75</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>710022</td>
-      <td>Location unknown</td>
-      <td>—</td>
-      <td>18.0</td>
-      <td>90.0</td>
-      <td>90.0</td>
-      <td>3.0</td>
-      <td>93.0</td>
-      <td>14.4</td>
-      <td>-78.6</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>2.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>180393</td>
-      <td>1097 LAKEWOOD ROAD</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=1097 LAKEWOOD ROAD, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>371.0</td>
-      <td>371.0</td>
-      <td>371.0</td>
-      <td>3.0</td>
-      <td>374.0</td>
-      <td>296.8</td>
-      <td>-77.2</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>5.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>680193</td>
-      <td>Location unknown</td>
-      <td>—</td>
-      <td>20.0</td>
-      <td>86.0</td>
-      <td>86.0</td>
-      <td>3.0</td>
-      <td>89.0</td>
-      <td>16.0</td>
-      <td>-73.0</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>1.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>72106</td>
-      <td>718 SARSFIELD ROAD</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=718 SARSFIELD ROAD, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>185.0</td>
-      <td>215.0</td>
-      <td>215.0</td>
-      <td>3.0</td>
-      <td>218.0</td>
-      <td>148.0</td>
-      <td>-70.0</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>7.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>760521</td>
-      <td>Location unknown</td>
-      <td>—</td>
-      <td>24.0</td>
-      <td>85.0</td>
-      <td>85.0</td>
-      <td>3.0</td>
-      <td>88.0</td>
-      <td>19.2</td>
-      <td>-68.8</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>3.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>11135</td>
-      <td>HAVRE BOUCHER, BOX 125</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=HAVRE BOUCHER, BOX 125, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>146.0</td>
-      <td>180.0</td>
-      <td>180.0</td>
-      <td>3.0</td>
-      <td>183.0</td>
-      <td>116.8</td>
-      <td>-66.2</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>2.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>150942</td>
-      <td>217 MINES ROAD</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=217 MINES ROAD, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>0.0</td>
-      <td>60.0</td>
-      <td>60.0</td>
-      <td>3.0</td>
-      <td>63.0</td>
-      <td>-2.5</td>
-      <td>-65.5</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>3.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>50165</td>
-      <td>86 Cardinal Lane</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=86 Cardinal Lane, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>0.0</td>
-      <td>60.0</td>
-      <td>60.0</td>
-      <td>3.0</td>
-      <td>63.0</td>
-      <td>-2.5</td>
-      <td>-65.5</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>0.50</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>760090</td>
-      <td>RR#3</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=RR#3, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>20.0</td>
-      <td>76.0</td>
-      <td>76.0</td>
-      <td>3.0</td>
-      <td>79.0</td>
-      <td>16.0</td>
-      <td>-63.0</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>15.00</td>
-      <td>Adequate yield (≥10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>670678</td>
-      <td>RR#4</td>
-      <td><a href="https://www.google.com/maps/search/?api=1&query=RR#4, Colchester County, Nova Scotia" target="_blank" class="map-link">📍 Map</a></td>
-      <td>5.0</td>
-      <td>62.0</td>
-      <td>62.0</td>
-      <td>3.0</td>
-      <td>65.0</td>
-      <td>2.5</td>
-      <td>-62.5</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>3.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>771611</td>
-      <td>Location unknown</td>
-      <td>—</td>
-      <td>14.0</td>
-      <td>70.0</td>
-      <td>70.0</td>
-      <td>3.0</td>
-      <td>73.0</td>
-      <td>11.2</td>
-      <td>-61.8</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>1.50</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-    <tr>
-      <td>720869</td>
-      <td>Location unknown</td>
-      <td>—</td>
-      <td>10.0</td>
-      <td>65.0</td>
-      <td>65.0</td>
-      <td>3.0</td>
-      <td>68.0</td>
-      <td>7.5</td>
-      <td>-60.5</td>
-      <td>CRITICAL - Well may be dry</td>
-      <td>5.00</td>
-      <td>Low yield (<10 L/min)</td>
-      <td>Unknown</td>
-    </tr>
-  </tbody>
-</table>
-</div>
-<div class='tab-pane fade' id='all' role='tabpanel'>
+<div class='tab-pane fade show active' id='all' role='tabpanel' aria-labelledby='all-tab'>
 <div class="table-responsive"><table id="all_wells_table" class="table table-striped table-bordered" style="width:100%"></table></div>
 </div>
-<div class='tab-pane fade' id='dist' role='tabpanel'>
+<div class='tab-pane fade' id='dist' role='tabpanel' aria-labelledby='dist-tab'>
 <table border="1" class="dataframe table table-striped" id="risk_table">
   <thead>
     <tr style="text-align: right;">
@@ -446,28 +172,28 @@ table.dataTable thead th { white-space: nowrap; }
   <tbody>
     <tr>
       <td>No data</td>
-      <td>102313</td>
-    </tr>
-    <tr>
-      <td>CRITICAL - Well may be dry</td>
-      <td>12358</td>
+      <td>5445</td>
     </tr>
     <tr>
       <td>Low risk - &gt;5m buffer</td>
-      <td>10745</td>
+      <td>2050</td>
+    </tr>
+    <tr>
+      <td>CRITICAL - Well may be dry</td>
+      <td>1454</td>
     </tr>
     <tr>
       <td>Moderate risk - 2-5m buffer</td>
-      <td>257</td>
+      <td>39</td>
     </tr>
     <tr>
       <td>High risk - &lt;2m buffer</td>
-      <td>187</td>
+      <td>24</td>
     </tr>
   </tbody>
 </table>
 </div>
-<div class'tab-pane fade' id='aq' role='tabpanel'>
+<div class='tab-pane fade' id='aq' role='tabpanel' aria-labelledby='aq-tab'>
 <table border="1" class="dataframe table table-striped" id="aq_table">
   <thead>
     <tr style="text-align: right;">
@@ -489,34 +215,80 @@ table.dataTable thead th { white-space: nowrap; }
   </thead>
   <tbody>
     <tr>
-      <th>Unknown</th>
-      <td>12358</td>
-      <td>187</td>
-      <td>10745</td>
-      <td>257</td>
-      <td>102313</td>
+      <th>Bedrock</th>
+      <td>991</td>
+      <td>9</td>
+      <td>1598</td>
+      <td>18</td>
+      <td>4201</td>
+    </tr>
+    <tr>
+      <th>Surficial</th>
+      <td>459</td>
+      <td>14</td>
+      <td>437</td>
+      <td>21</td>
+      <td>1158</td>
     </tr>
   </tbody>
 </table>
 </div>
 </div>
+
+<!-- Map Modal -->
+<div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen-lg-down">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="mapModalLabel">Interactive Well Risk Map - Multi-Station Analysis</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body position-relative">
+        <div class="map-controls">
+          <label><input type="checkbox" id="clusterToggle" checked> Cluster markers</label>
+          <label><input type="checkbox" id="criticalOnly"> Critical/High risk only</label>
+        </div>
+        <div id="wellMap"></div>
+        <div class="map-legend">
+          <strong>Risk Levels (Post-Drought Stress):</strong><br>
+          <div class="legend-item"><div class="legend-color" style="background-color: red;"></div>Critical</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: orange;"></div>High Risk</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: yellow;"></div>Moderate Risk</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: green;"></div>Low Risk</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: gray;"></div>No Data</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
-<script> const dtColumns = [{"data": "WELL_ID", "title": "WELL_ID"}, {"data": "location_display", "title": "location_display"}, {"data": "Map Link", "title": "Map Link"}, {"data": "DEPTH", "title": "DEPTH"}, {"data": "STATIC_WATER_LEVEL", "title": "STATIC_WATER_LEVEL"}, {"data": "current_water_level_m_observed", "title": "current_water_level_m_observed"}, {"data": "drought_drawdown_m", "title": "drought_drawdown_m"}, {"data": "stressed_water_level_m", "title": "stressed_water_level_m"}, {"data": "pump_depth_m", "title": "pump_depth_m"}, {"data": "buffer_m", "title": "buffer_m"}, {"data": "drying_risk", "title": "drying_risk"}, {"data": "YIELD", "title": "YIELD"}, {"data": "yield_category", "title": "yield_category"}, {"data": "aquifer_type", "title": "aquifer_type"}]; const dataJsonFile = 'wells_data.json';</script>
+
+</div>
+<script> 
+const dtColumns = [{"data": "WELL_ID", "title": "WELL_ID"}, {"data": "location_display", "title": "location_display"}, {"data": "Map Link", "title": "Map Link"}, {"data": "DEPTH", "title": "DEPTH"}, {"data": "STATIC_WATER_LEVEL", "title": "STATIC_WATER_LEVEL"}, {"data": "STATIC_WATER_LEVEL_ORIGINAL", "title": "STATIC_WATER_LEVEL_ORIGINAL"}, {"data": "current_water_level_m_observed", "title": "current_water_level_m_observed"}, {"data": "drought_drawdown_m", "title": "drought_drawdown_m"}, {"data": "stressed_water_level_m", "title": "stressed_water_level_m"}, {"data": "pump_depth_m", "title": "pump_depth_m"}, {"data": "buffer_m", "title": "buffer_m"}, {"data": "drying_risk", "title": "drying_risk"}, {"data": "YIELD", "title": "YIELD"}, {"data": "yield_category", "title": "yield_category"}, {"data": "aquifer_type", "title": "aquifer_type"}]; 
+const dataJsonFile = 'wells_data.json';
+const mapDataFile = 'wells_map_data.json';
+const mapCenter = [45.39017050479614, -63.38089057027913];
+</script>
 
 <script>
+let map = null;
+let markersLayer = null;
+let clusterGroup = null;
+let allMapData = [];
+let currentTable = null;
+
 $(document).ready(function() {
-  // Use Fetch API to load the data payload separately
+  // Load table data
   fetch(dataJsonFile)
     .then(response => {
         if (!response.ok) {
-            // Handle HTTP errors (e.g., 404)
             throw new Error('Failed to load data: ' + response.statusText);
         }
         return response.json();
     })
     .then(allWellsData => {
         // Initialize the large table from JSON data after fetching
-        $('#all_wells_table').DataTable({
+        currentTable = $('#all_wells_table').DataTable({
             data: allWellsData,
             columns: dtColumns,
             pageLength: 25,
@@ -524,22 +296,189 @@ $(document).ready(function() {
             dom: 'Bfrtip',
             buttons: ['copy', 'csv', 'excel', 'print'],
             scrollX: true,
-            responsive: true
+            responsive: true,
+            order: [[findColumnIndex('buffer_m'), 'asc']] // Sort by buffer_m ascending (most critical first)
+        });
+        
+        // Add row selection event to sync with map
+        $('#all_wells_table tbody').on('click', 'tr', function() {
+            if ($(this).hasClass('selected')) {
+                $(this).removeClass('selected');
+            } else {
+                currentTable.$('tr.selected').removeClass('selected');
+                $(this).addClass('selected');
+                
+                // If map is open, try to highlight the corresponding well
+                const data = currentTable.row(this).data();
+                if (map && data && data.WELL_ID) {
+                    highlightWellOnMap(data.WELL_ID);
+                }
+            }
         });
     })
     .catch(error => {
         console.error("Error initializing dashboard:", error);
-        // Display an error message to the user if the data fails to load
         $('#all_wells_table').html("<p style='color:red;'>Error: Could not load well data. Ensure 'wells_data.json' is present alongside the HTML report.</p>");
     });
 
-  // Initialize the smaller, pre-rendered tables (they don't use the large allWellsData payload)
-  $('#top20_table, #risk_table, #aq_table').DataTable({
+  // Load map data
+  fetch(mapDataFile)
+    .then(response => response.json())
+    .then(mapData => {
+        allMapData = mapData;
+        console.log(`Loaded ${allMapData.length} wells for mapping`);
+    })
+    .catch(error => {
+        console.error("Error loading map data:", error);
+    });
+
+  // Initialize smaller tables
+  $('#risk_table, #aq_table').DataTable({
     pageLength: 20,
     dom: 'Bfrtip',
     buttons: ['copy', 'csv', 'print'],
-    scrollX: true
+    scrollX: true,
+    responsive: true
   });
+});
+
+// Helper function to find column index by name
+function findColumnIndex(columnName) {
+    for (let i = 0; i < dtColumns.length; i++) {
+        if (dtColumns[i].data === columnName) {
+            return i;
+        }
+    }
+    return 0; // Default to first column
+}
+
+// Initialize map when modal is shown
+$('#mapModal').on('shown.bs.modal', function () {
+    if (!map) {
+        initializeMap();
+    } else {
+        // Refresh map size in case of layout changes
+        setTimeout(() => map.invalidateSize(), 100);
+    }
+});
+
+function initializeMap() {
+    // Initialize the map
+    map = L.map('wellMap').setView(mapCenter, 9);
+    
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    
+    // Initialize cluster group
+    clusterGroup = L.markerClusterGroup({
+        maxClusterRadius: 50,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false
+    });
+    
+    // Initialize regular marker layer group
+    markersLayer = L.layerGroup();
+    
+    // Load markers
+    loadMapMarkers();
+    
+    // Add event listeners for controls
+    document.getElementById('clusterToggle').addEventListener('change', toggleClustering);
+    document.getElementById('criticalOnly').addEventListener('change', filterMarkers);
+}
+
+function loadMapMarkers(filterCritical = false) {
+    // Clear existing markers
+    if (clusterGroup) clusterGroup.clearLayers();
+    if (markersLayer) markersLayer.clearLayers();
+    
+    let filteredData = allMapData;
+    if (filterCritical) {
+        filteredData = allMapData.filter(well => 
+            well.risk.includes('CRITICAL') || well.risk.includes('High risk')
+        );
+    }
+    
+    // Sort by risk priority (critical first)
+    filteredData.sort((a, b) => a.risk_priority - b.risk_priority);
+    
+    filteredData.forEach(well => {
+        const marker = L.circleMarker([well.lat, well.lng], {
+            radius: 6,
+            fillColor: well.color,
+            color: '#000',
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.8
+        }).bindPopup(well.popup);
+        
+        // Store well ID for highlighting
+        marker.wellId = well.well_id;
+        
+        clusterGroup.addLayer(marker);
+        markersLayer.addLayer(marker);
+    });
+    
+    // Add appropriate layer to map
+    const clusterEnabled = document.getElementById('clusterToggle')?.checked ?? true;
+    if (clusterEnabled) {
+        map.addLayer(clusterGroup);
+        if (map.hasLayer(markersLayer)) {
+            map.removeLayer(markersLayer);
+        }
+    } else {
+        map.addLayer(markersLayer);
+        if (map.hasLayer(clusterGroup)) {
+            map.removeLayer(clusterGroup);
+        }
+    }
+}
+
+function toggleClustering() {
+    const clusterEnabled = document.getElementById('clusterToggle').checked;
+    
+    if (clusterEnabled) {
+        if (map.hasLayer(markersLayer)) {
+            map.removeLayer(markersLayer);
+        }
+        map.addLayer(clusterGroup);
+    } else {
+        if (map.hasLayer(clusterGroup)) {
+            map.removeLayer(clusterGroup);
+        }
+        map.addLayer(markersLayer);
+    }
+}
+
+function filterMarkers() {
+    const criticalOnly = document.getElementById('criticalOnly').checked;
+    loadMapMarkers(criticalOnly);
+}
+
+function highlightWellOnMap(wellId) {
+    if (!map) return;
+    
+    // Find the well in map data
+    const well = allMapData.find(w => w.well_id === wellId);
+    if (!well) return;
+    
+    // Pan to the well location
+    map.setView([well.lat, well.lng], 12);
+    
+    // Try to find and open the popup
+    const currentLayer = map.hasLayer(clusterGroup) ? clusterGroup : markersLayer;
+    currentLayer.eachLayer(layer => {
+        if (layer.wellId === wellId) {
+            layer.openPopup();
+        }
+    });
+}
+
+// Cleanup when modal is hidden
+$('#mapModal').on('hidden.bs.modal', function () {
+    // Optional: Could clear selections or reset view
 });
 </script>
 

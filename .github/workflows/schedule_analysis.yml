@@ -1,29 +1,25 @@
 name: Scheduled Drought Risk Analysis
 
 on:
-  # 1. Schedule the job to run every day at 10:00 AM UTC (e.g., 7:00 AM ADT in summer)
   schedule:
-    # Use cron syntax: minute hour day-of-month month day-of-week
     - cron: '0 10 * * *'
-  
-  # 2. Allow manual triggering from the GitHub Actions tab
   workflow_dispatch:
 
 jobs:
   run_and_publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     
-    # Permissions are needed to allow the job to commit files back to the repo
     permissions:
-      contents: write 
+      contents: write
       
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        # Set Git LFS to pull large files if necessary
         with:
           lfs: true
-
+          fetch-depth: 0
+          
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -32,19 +28,44 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          # Install your necessary libraries (adjust this list as needed)
-          pip install pandas numpy geopandas requests openpyxl
-
+          pip install pandas numpy geopandas requests openpyxl shapely pyproj
+          
+      - name: Verify Required Files
+        run: |
+          echo "Checking for required files..."
+          ls -la
+          if [ ! -f "water_table.py" ]; then
+            echo "Error: water_table.py not found"
+            exit 1
+          fi
+          echo "Required files verified"
+          
       - name: Run Water Table Analysis Script
-        run: python water_table.py
-        
+        run: |
+          echo "Starting drought risk analysis..."
+          python water_table.py
+          echo "Analysis completed"
+          
+      - name: Verify Output Files
+        run: |
+          echo "Checking generated files..."
+          ls -la *.html *.csv *.json || echo "Some output files may be missing"
+          
       - name: Commit and Push Updated Output
-        # This step commits the new HTML and CSV files back to the repository
+        if: success()
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          # Only commit the generated output files
-          file_pattern: 'risk_report.html colchester_well_risk_analysis.csv wells_data.json'
-          commit_message: '🤖 Automated: Update drought risk analysis report'
-          # Force LFS to track the large HTML file during commit
-          add_options: '-f' 
-          lfs: true
+          file_pattern: '*.html *.csv *.json'
+          commit_message: 'Automated: Update drought risk analysis report [skip ci]'
+          skip_dirty_check: true
+          
+      - name: Report Build Status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "Drought risk analysis completed successfully"
+            echo "Files committed back to repository"
+          else
+            echo "Drought risk analysis failed"
+            echo "Check the logs above for detailed error information"
+          fi
