@@ -9,7 +9,9 @@ from datetime import datetime
 import json
 import requests
 import os
+import pathlib
 import io
+import re
 warnings.filterwarnings('ignore')
 
 print("=== COLCHESTER WELL DRYING RISK ANALYSIS ===")
@@ -39,17 +41,17 @@ DROUGHT_DRAWDOWN_M = 2.0
 COLCHESTER_STATIONS = {
     "01EO001": {  # Salmon River near Truro
         "name": "Salmon River near Truro", 
-        "critical_threshold": 1.0,  # m³/s
+        "critical_threshold": 1.0,  # mÂ³/s
         "region": "Central Colchester"
     },
     "01EB001": {  # Economy River near Economy  
         "name": "Economy River near Economy",
-        "critical_threshold": 0.5,  # m³/s (smaller river)
+        "critical_threshold": 0.5,  # mÂ³/s (smaller river)
         "region": "North Colchester"
     },
     "01ED002": {  # Great Village River at Great Village
         "name": "Great Village River at Great Village", 
-        "critical_threshold": 0.8,  # m³/s
+        "critical_threshold": 0.8,  # mÂ³/s
         "region": "North-Central Colchester"
     }
 }
@@ -517,7 +519,7 @@ def fetch_multi_station_discharge(stations_dict, api_url):
                 total_stations += 1
                 
                 status = "CRITICAL" if is_critical else "Normal"
-                print(f"  {station_info['name']}: {latest_flow:.2f} m³/s ({status})")
+                print(f"  {station_info['name']}: {latest_flow:.2f} mÂ³/s ({status})")
                 
             except Exception as e:
                 print(f"Error processing station {station_id}: {e}")
@@ -807,6 +809,410 @@ results = wells[out_cols].sort_values("buffer_m", ascending=True)
 results.to_csv(output_csv, index=False)
 print(f"\nDetailed results saved to {output_csv}")
 
+import pathlib
+
+# ---------------------------
+# ENHANCED WELL REPORT GENERATION
+# ---------------------------
+
+def generate_detailed_well_report(row):
+    """Generate a comprehensive, layman-friendly report for a single well"""
+    
+    well_id = str(row.get("WELL_ID", "Unknown")).replace('<a href="well_reports/well_', '').replace('.html" target="_blank">', '').replace(' 📊</a>', '')
+    fname = report_dir / f"well_{well_id}.html"
+    
+    # Helper functions for safe data formatting
+    def safe_get(key, default="N/A"):
+        value = row.get(key, default)
+        if pd.isna(value) or value == "nan" or value == "":
+            return default
+        return value
+    
+    def format_number(value, unit="", decimals=1):
+        try:
+            if pd.isna(value) or value == "nan":
+                return "N/A"
+            return f"{float(value):.{decimals}f}{unit}"
+        except:
+            return "N/A"
+    
+    # Extract key values
+    well_depth = safe_get("DEPTH")
+    static_level = safe_get("STATIC_WATER_LEVEL") 
+    current_level = safe_get("current_water_level_m_observed")
+    stressed_level = safe_get("stressed_water_level_m")
+    pump_depth = safe_get("pump_depth_m")
+    buffer_m = safe_get("buffer_m")
+    risk_level = safe_get("drying_risk")
+    drought_stress = safe_get("drought_drawdown_m")
+    yield_val = safe_get("YIELD")
+    aquifer_type = safe_get("aquifer_type", "Unknown")
+    location = safe_get("location_display", "Location not specified")
+    
+    # Determine risk color and explanation
+    risk_color = "green"
+    risk_explanation = ""
+    risk_recommendations = ""
+    
+    if "CRITICAL" in str(risk_level):
+        risk_color = "#d32f2f"
+        risk_explanation = """
+        <strong>CRITICAL RISK:</strong> Your well is at immediate risk of running dry. The water level may already be at or below 
+        your pump depth, which means your pump may be drawing air instead of water. This requires immediate attention.
+        """
+        risk_recommendations = """
+        <h4>Immediate Actions Needed:</h4>
+        <ul>
+            <li><strong>Contact a well professional immediately</strong> - Don't wait</li>
+            <li><strong>Reduce water usage</strong> to absolute essentials only</li>
+            <li><strong>Check your pump</strong> - If it's running but no water comes out, turn it off to prevent damage</li>
+            <li><strong>Consider emergency water supply</strong> options (bottled water, neighbors, etc.)</li>
+            <li><strong>Pump lowering may be needed</strong> if there's enough water deeper in the well</li>
+            <li><strong>Well deepening</strong> might be required if the aquifer allows</li>
+        </ul>
+        """
+    elif "High risk" in str(risk_level):
+        risk_color = "#f57c00"
+        risk_explanation = """
+        <strong>HIGH RISK:</strong> Your well has a very small safety margin. During dry periods or with increased usage, 
+        your well could run dry. The pump is close to the water level, leaving little room for error.
+        """
+        risk_recommendations = """
+        <h4>Recommended Actions:</h4>
+        <ul>
+            <li><strong>Monitor water levels closely</strong> - Watch for changes in flow or pressure</li>
+            <li><strong>Implement water conservation</strong> measures immediately</li>
+            <li><strong>Get a professional assessment</strong> within the next few weeks</li>
+            <li><strong>Consider pump lowering</strong> as a preventive measure</li>
+            <li><strong>Install a low-water alarm</strong> to warn before the well runs dry</li>
+            <li><strong>Have an emergency water plan</strong> ready</li>
+        </ul>
+        """
+    elif "Moderate risk" in str(risk_level):
+        risk_color = "#fbc02d"
+        risk_explanation = """
+        <strong>MODERATE RISK:</strong> Your well has some safety margin, but it's worth monitoring. During severe droughts 
+        or if your water usage increases significantly, you might experience problems.
+        """
+        risk_recommendations = """
+        <h4>Recommended Actions:</h4>
+        <ul>
+            <li><strong>Practice water conservation</strong> during dry periods</li>
+            <li><strong>Monitor your well</strong> for signs of declining water levels</li>
+            <li><strong>Plan for professional assessment</strong> within the next year</li>
+            <li><strong>Be prepared</strong> with water conservation measures during droughts</li>
+            <li><strong>Consider efficiency upgrades</strong> for appliances and fixtures</li>
+        </ul>
+        """
+    else:  # Low risk
+        risk_color = "#388e3c"
+        risk_explanation = """
+        <strong>LOW RISK:</strong> Your well has a good safety margin. Even during dry periods, you should have adequate water supply.
+        This doesn't mean unlimited water, but you're in a relatively secure position.
+        """
+        risk_recommendations = """
+        <h4>Recommended Actions:</h4>
+        <ul>
+            <li><strong>Continue regular maintenance</strong> of your well system</li>
+            <li><strong>Monitor periodically</strong> for any changes</li>
+            <li><strong>Practice reasonable water conservation</strong> as good stewardship</li>
+            <li><strong>Consider a professional checkup</strong> every 3-5 years</li>
+        </ul>
+        """
+    
+    # Aquifer explanation
+    aquifer_explanation = ""
+    if aquifer_type == "Bedrock":
+        aquifer_explanation = """
+        Your well draws water from <strong>bedrock aquifers</strong> - water stored in cracks and fractures in solid rock. 
+        These wells can be very reliable but may be more susceptible to seasonal variations and take longer to recover 
+        after heavy use.
+        """
+    elif aquifer_type == "Surficial":
+        aquifer_explanation = """
+        Your well draws water from <strong>surficial aquifers</strong> - water stored in soil, sand, and gravel near the surface. 
+        These wells often recharge more quickly from rainfall but may be more sensitive to dry periods.
+        """
+    else:
+        aquifer_explanation = """
+        The aquifer type for your well is not determined in our records. This could be either bedrock (water from rock fractures) 
+        or surficial (water from soil/sand layers). A well professional can help determine this.
+        """
+    
+    # Drought stress explanation
+    drought_explanation = ""
+    try:
+        drought_value = float(drought_stress)
+        if drought_value > 3.0:
+            drought_explanation = f"""
+            <strong>Severe Regional Drought Conditions:</strong> Our analysis shows that most area rivers and streams 
+            are experiencing critically low flows. We've applied an additional {drought_value:.1f} meters of stress testing 
+            to your well to simulate these harsh conditions.
+            """
+        elif drought_value > 2.5:
+            drought_explanation = f"""
+            <strong>Moderate Regional Drought Conditions:</strong> Some area waterways are showing stress. We've applied 
+            an additional {drought_value:.1f} meters of stress testing to simulate continued dry conditions.
+            """
+        else:
+            drought_explanation = f"""
+            <strong>Normal Conditions:</strong> Area waterways are at normal levels. We've applied a standard 
+            {drought_value:.1f} meters of drought stress testing as a precautionary measure.
+            """
+    except:
+        drought_explanation = "We've applied standard drought stress testing to simulate dry conditions."
+    
+    # Yield explanation
+    yield_explanation = ""
+    if yield_val and yield_val != "N/A":
+        try:
+            yield_num = float(yield_val)
+            if yield_num < 5:
+                yield_explanation = f"""
+                <strong>Low Yield Well:</strong> Your well produces {yield_num} L/min, which is considered low. This means 
+                you need to be especially careful about water usage and may need to spread out high-demand activities 
+                (like laundry, showers) throughout the day.
+                """
+            elif yield_num < 10:
+                yield_explanation = f"""
+                <strong>Moderate Yield Well:</strong> Your well produces {yield_num} L/min, which is adequate for most 
+                household needs with reasonable usage patterns.
+                """
+            else:
+                yield_explanation = f"""
+                <strong>Good Yield Well:</strong> Your well produces {yield_num} L/min, which should meet typical 
+                household water needs comfortably.
+                """
+        except:
+            yield_explanation = f"Your well's yield is recorded as {yield_val} L/min."
+    else:
+        yield_explanation = "The flow rate (yield) of your well is not available in our records."
+    
+    # Technical summary for those who want details
+    technical_summary = f"""
+    <div class="tech-details">
+        <h4>Technical Details (for reference)</h4>
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Total Well Depth:</strong> {format_number(well_depth, 'm')}</p>
+                <p><strong>Original Static Water Level:</strong> {format_number(static_level, 'm')}</p>
+                <p><strong>Current Water Level:</strong> {format_number(current_level, 'm')}</p>
+                <p><strong>Stressed Water Level:</strong> {format_number(stressed_level, 'm')}</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Estimated Pump Depth:</strong> {format_number(pump_depth, 'm')}</p>
+                <p><strong>Safety Buffer:</strong> {format_number(buffer_m, 'm')}</p>
+                <p><strong>Drought Stress Applied:</strong> {format_number(drought_stress, 'm')}</p>
+                <p><strong>Well Yield:</strong> {format_number(yield_val, ' L/min')}</p>
+            </div>
+        </div>
+        <p><em>Note: Water levels are measured as depth below ground surface. Larger numbers mean deeper water.</em></p>
+    </div>
+    """
+    
+    # Generate the HTML report
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Well Report - {well_id}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {{ font-family: Georgia, serif; background-color: #f8f9fa; }}
+        .risk-header {{ color: {risk_color}; border-left: 4px solid {risk_color}; padding-left: 15px; }}
+        .info-section {{ background: white; border-radius: 8px; padding: 20px; margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        .tech-details {{ background: #f8f9fa; border-radius: 8px; padding: 15px; margin-top: 20px; }}
+        .alert-custom {{ border-left: 4px solid {risk_color}; }}
+        h1, h2, h3, h4 {{ color: #2c3e50; }}
+        .back-button {{ position: fixed; top: 20px; right: 20px; z-index: 1000; }}
+        @media print {{ .back-button {{ display: none; }} }}
+        .key-finding {{ font-size: 1.1em; font-weight: bold; margin: 10px 0; }}
+        .explanation {{ line-height: 1.6; }}
+    </style>
+</head>
+<body>
+    <a href="../index.html" class="btn btn-primary back-button">← Back to Dashboard</a>
+    
+    <div class="container py-4">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                
+                <header class="text-center mb-4">
+                    <h1>Well Risk Assessment Report</h1>
+                    <h2>Well ID: {well_id}</h2>
+                    <p class="text-muted">Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
+                </header>
+                
+                <div class="info-section alert alert-custom">
+                    <div class="risk-header">
+                        <h3>Your Well's Risk Status</h3>
+                    </div>
+                    <div class="key-finding" style="color: {risk_color};">{risk_level}</div>
+                    <div class="explanation">
+                        {risk_explanation}
+                    </div>
+                </div>
+                
+                <div class="info-section">
+                    <h3>What This Means for You</h3>
+                    <div class="explanation">
+                        {risk_recommendations}
+                    </div>
+                </div>
+                
+                <div class="info-section">
+                    <h3>About Your Well</h3>
+                    <div class="explanation">
+                        <p><strong>Location:</strong> {location}</p>
+                        
+                        <h4>Water Source</h4>
+                        <p>{aquifer_explanation}</p>
+                        
+                        <h4>Well Capacity</h4>
+                        <p>{yield_explanation}</p>
+                        
+                        <h4>Current Conditions Assessment</h4>
+                        <p>{drought_explanation}</p>
+                    </div>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Understanding Your Well's Safety Margin</h3>
+                    <div class="explanation">
+                        <p>Think of your well like a straw in a glass of water. The <strong>safety margin</strong> (or "buffer") 
+                        is how much water is above the bottom of your straw (pump). If the water level drops below your straw, 
+                        you'll suck air instead of water.</p>
+                        
+                        <p><strong>Your current safety margin: {format_number(buffer_m, ' meters')}</strong></p>
+                        
+                        <ul>
+                            <li><strong>Positive numbers are good</strong> - You have water above your pump</li>
+                            <li><strong>Numbers near zero are concerning</strong> - Your pump is close to the water surface</li>
+                            <li><strong>Negative numbers are critical</strong> - Your pump may be above the water level</li>
+                        </ul>
+                        
+                        <p>We calculate this by looking at where your pump likely sits in the well (usually about 80% down 
+                        the total depth) and comparing that to where the water level is now, including stress from drought conditions.</p>
+                    </div>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Warning Signs to Watch For</h3>
+                    <div class="explanation">
+                        <p>Contact a well professional if you notice any of these signs:</p>
+                        <ul>
+                            <li><strong>Reduced water pressure</strong> in your taps or shower</li>
+                            <li><strong>Pump running more frequently</strong> or for longer periods</li>
+                            <li><strong>Air spitting from faucets</strong> when you first turn them on</li>
+                            <li><strong>Pump making unusual noises</strong> or cycling on and off rapidly</li>
+                            <li><strong>Cloudy or muddy water</strong> (could indicate low water levels)</li>
+                            <li><strong>Complete loss of water</strong> - turn off your pump immediately</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Water Conservation Tips</h3>
+                    <div class="explanation">
+                        <p>Whether your well is high-risk or low-risk, these conservation measures can help:</p>
+                        
+                        <h4>High-Impact Actions:</h4>
+                        <ul>
+                            <li><strong>Fix leaks immediately</strong> - A dripping tap can waste thousands of liters per year</li>
+                            <li><strong>Install low-flow fixtures</strong> - Showerheads, toilets, and faucet aerators</li>
+                            <li><strong>Run full loads</strong> - Only run dishwasher and washing machine when full</li>
+                            <li><strong>Take shorter showers</strong> - Even 2 minutes less makes a big difference</li>
+                        </ul>
+                        
+                        <h4>During Dry Periods:</h4>
+                        <ul>
+                            <li><strong>Space out water usage</strong> - Don't run multiple appliances at once</li>
+                            <li><strong>Collect rainwater</strong> for gardens and outdoor use</li>
+                            <li><strong>Limit lawn watering</strong> - Grass will recover, wells may not</li>
+                            <li><strong>Use greywater</strong> where safe (dishwater for plants, etc.)</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Professional Help</h3>
+                    <div class="explanation">
+                        <p><strong>When to call a well professional:</strong></p>
+                        <ul>
+                            <li>Your well is rated as High Risk or Critical</li>
+                            <li>You notice any warning signs listed above</li>
+                            <li>Your water usage needs have increased significantly</li>
+                            <li>It's been more than 10 years since a professional inspection</li>
+                        </ul>
+                        
+                        <p><strong>What they can do:</strong></p>
+                        <ul>
+                            <li><strong>Water level measurement</strong> - Accurate current assessment</li>
+                            <li><strong>Pump inspection and adjustment</strong> - Lower pump if possible</li>
+                            <li><strong>Well rehabilitation</strong> - Cleaning and restoration techniques</li>
+                            <li><strong>Well deepening</strong> - If geology allows</li>
+                            <li><strong>Water quality testing</strong> - Ensure safety</li>
+                            <li><strong>System efficiency improvements</strong> - Better pumps, pressure tanks</li>
+                        </ul>
+                        
+                        <p><strong>Finding a professional:</strong> Look for certified well drillers or pump installers 
+                        in Nova Scotia. Check with the Nova Scotia Ground Water Association or your local health authority 
+                        for recommendations.</p>
+                    </div>
+                </div>
+                
+                {technical_summary}
+                
+                <div class="info-section">
+                    <h3>About This Analysis</h3>
+                    <div class="explanation">
+                        <p>This report is based on:</p>
+                        <ul>
+                            <li><strong>Well construction data</strong> from provincial records</li>
+                            <li><strong>Regional drought conditions</strong> from Environment Canada monitoring stations</li>
+                            <li><strong>Standard engineering assumptions</strong> about pump placement and drawdown</li>
+                            <li><strong>Conservative risk assessment</strong> designed to err on the side of caution</li>
+                        </ul>
+                        
+                        <p><strong>Limitations:</strong> This analysis makes estimates based on typical conditions and standard practices. 
+                        Your specific situation may vary due to factors like actual pump depth, local geology, recent well work, 
+                        or changes in water usage. For definitive assessment, consult with a qualified well professional.</p>
+                        
+                        <p><strong>Disclaimer:</strong> This report is for informational purposes and does not replace 
+                        professional well assessment or water system inspection.</p>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>"""
+    
+    # Write the report
+    with open(fname, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+# Create directory for reports
+report_dir = pathlib.Path("well_reports")
+report_dir.mkdir(exist_ok=True)
+
+# Generate enhanced reports for all wells
+print("\n=== GENERATING ENHANCED WELL REPORTS ===")
+report_count = 0
+for _, row in results.iterrows():
+    try:
+        generate_detailed_well_report(row)
+        report_count += 1
+    except Exception as e:
+        well_id = str(row.get("WELL_ID", "Unknown"))
+        print(f"Warning: Could not generate report for well {well_id}: {e}")
+
+print(f"Generated {report_count} detailed well reports in {report_dir}/")
+
 # ---------------------------
 # 10. Prepare map data for wells with valid coordinates
 # ---------------------------
@@ -1021,23 +1427,52 @@ def prepare_map_data(wells_df, max_points=5000):
 map_wells_data = prepare_map_data(wells)
 
 # ---------------------------
-# 11. Create HTML report (Dashboard Style with DataTables and Interactive Map)
+# ENHANCED WELL ID LINK CREATION WITH REPORT ICON
 # ---------------------------
-print("Generating HTML dashboard with multi-station analysis...")
 
-# === DATA PREPARATION FOR HTML ===
+def create_well_report_link(well_id):
+    """Create a clickable well ID with report icon"""
+    # Clean the well_id in case it's already been processed
+    clean_id = str(well_id).strip()
+    
+    # Remove any existing HTML if it's already been processed
+    if '<a href=' in clean_id:
+        # Extract just the ID from existing HTML
+        match = re.search(r'well_([^\.]+)\.html', clean_id)
+        if match:
+            clean_id = match.group(1)
+        else:
+            # Fallback: try to extract text between tags
+            clean_id = re.sub(r'<[^>]+>', '', clean_id).strip()
+    
+    # Create the link with report icon
+    return f'<a href="well_reports/well_{clean_id}.html" target="_blank" class="well-link" title="View detailed report for well {clean_id}">{clean_id} 📊</a>'
+
+# ---------------------------
+# UPDATED HTML TABLE PREPARATION
+# ---------------------------
 
 # Prepare the main table for client-side rendering
 all_wells_display = results.copy()
+
+# Apply the new link creation function
+print("Creating well ID links with report icons...")
+if 'WELL_ID' in all_wells_display.columns:
+    all_wells_display['WELL_ID'] = all_wells_display['WELL_ID'].apply(create_well_report_link)
+    print(f"Created report links for {len(all_wells_display)} wells")
+
+# Rest of table preparation...
 if 'google_maps_link' in all_wells_display.columns:
     all_wells_display['Map Link'] = all_wells_display['google_maps_link'].apply(
         lambda x: f'<a href="{x}" target="_blank" class="map-link">🗺️ Map</a>' if x else '—'
     )
-    # Define columns for the final table, removing originals used for the map link
+    
+    # Define columns for the final table
     drop_cols = ['google_maps_link', 'CIVIC_ADDRESS', 'MUNICIPALITY', 'latitude', 'longitude']
-    
-    display_cols = ['WELL_ID', 'location_display', 'Map Link'] + [c for c in all_wells_display.columns if c not in drop_cols + ['WELL_ID', 'location_display', 'Map Link']]
-    
+    display_cols = ['WELL_ID', 'location_display', 'Map Link'] + [
+        c for c in all_wells_display.columns 
+        if c not in drop_cols + ['WELL_ID', 'location_display', 'Map Link']
+    ]
     all_wells_display = all_wells_display[display_cols]
 
 # Convert the full dataset to JSON
@@ -1078,14 +1513,17 @@ else:
     map_center_lat = 45.3
     map_center_lng = -63.3  # Nova Scotia center
 
-# === HTML STRING BUILDING ===
+# ---------------------------
+# 11. Create HTML report (Dashboard Style with DataTables and Interactive Map)
+# ---------------------------
+print("Generating HTML dashboard with multi-station analysis...")
 
 html_parts = []
 html_parts.append("<!doctype html>")
 html_parts.append("<html lang='en'><head><meta charset='utf-8'><title>Colchester Multi-Station Well Risk Report</title>")
 
 # CSS and JS libraries
-html_parts.append(f"""
+html_parts.append("""
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
@@ -1108,6 +1546,32 @@ h1,h2 {{ color:#0b4d78; margin-top:20px; }}
 .map-link:hover {{ text-decoration:underline; }}
 .dataTables_wrapper .dt-buttons {{ margin-bottom:10px; }}
 table.dataTable thead th {{ white-space: nowrap; }}
+
+/* Enhanced Well ID link styles */
+.well-link {
+    color: #0b4d78;
+    text-decoration: none;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.well-link:hover {
+    color: #1976d2;
+    text-decoration: underline;
+}
+
+/* Make sure links are clickable in DataTables */
+table.dataTable td .well-link {
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+}
+
+table.dataTable td .well-link:hover {
+    background-color: rgba(11, 77, 120, 0.1);
+}
 
 /* Map Modal Styles */
 #mapModal .modal-dialog {{ max-width: 95vw; }}
@@ -1230,6 +1694,7 @@ html_parts.append("""
     
     <h4>Understanding the Columns</h4>
     <ul>
+        <li><strong>WELL_ID 📊:</strong> Click the chart icon to view a detailed, easy-to-understand report for that specific well</li>
         <li><strong>buffer_m (Buffer in Meters):</strong> Vertical distance between stressed water level and pump depth. Negative values indicate critical risk.</li>
         <li><strong>drying_risk:</strong> Risk category based on buffer after drought stress testing</li>
         <li><strong>stressed_water_level_m:</strong> Depth to water after applying regional drought drawdown</li>
@@ -1330,7 +1795,7 @@ const mapDataFile = '{map_data_json_file}';
 const mapCenter = [{map_center_lat}, {map_center_lng}];
 </script>""")
 
-# DataTables and Map initialization script (same as before)
+# DataTables and Map initialization script
 html_parts.append("""
 <script>
 let map = null;
@@ -1573,7 +2038,7 @@ if station_data:
     print(f"Station results:")
     for station_id, result in station_data['stations'].items():
         status = "CRITICAL" if result['critical'] else "Normal"
-        print(f"  {result['name']}: {result['flow']:.2f} m³/s ({status})")
+        print(f"  {result['name']}: {result['flow']:.2f} mÂ³/s ({status})")
     print(f"Critical ratio: {station_data['critical_ratio']:.1%}")
 
 drought_stats = wells["drought_drawdown_m"].describe()
