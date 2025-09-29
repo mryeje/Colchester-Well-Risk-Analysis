@@ -1018,6 +1018,13 @@ def generate_detailed_well_report(row):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Well Report - {well_id}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+          crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <style>
         body {{ font-family: Georgia, serif; background-color: #f8f9fa; }}
         .risk-header {{ color: {risk_color}; border-left: 4px solid {risk_color}; padding-left: 15px; }}
@@ -1530,7 +1537,7 @@ html_parts.append("""
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-<style>
+<style><style>
 body {{ background:#f8fafc; color:#111; }}
 h1,h2 {{ color:#0b4d78; margin-top:20px; }}
 .card {{ border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,0.08); margin-bottom:20px; }}
@@ -1547,38 +1554,57 @@ h1,h2 {{ color:#0b4d78; margin-top:20px; }}
 .dataTables_wrapper .dt-buttons {{ margin-bottom:10px; }}
 table.dataTable thead th {{ white-space: nowrap; }}
 
-/* Enhanced Well ID link styles */
-.well-link {
+.well-link {{
     color: #0b4d78;
     text-decoration: none;
     font-weight: 500;
     display: inline-flex;
     align-items: center;
     gap: 4px;
-}
+}}
 
-.well-link:hover {
+.well-link:hover {{
     color: #1976d2;
     text-decoration: underline;
-}
+}}
 
-/* Make sure links are clickable in DataTables */
-table.dataTable td .well-link {
+table.dataTable td .well-link {{
     padding: 2px 4px;
     border-radius: 3px;
     transition: all 0.2s ease;
-}
+}}
 
-table.dataTable td .well-link:hover {
+table.dataTable td .well-link:hover {{
     background-color: rgba(11, 77, 120, 0.1);
-}
+}}
 
-/* Map Modal Styles */
-#mapModal .modal-dialog {{ max-width: 95vw; }}
-#mapModal .modal-body {{ padding: 0; }}
-#wellMap {{ height: 80vh; width: 100%; }}
+/* Map Modal Styles - FIXED */
+#mapModal .modal-dialog {{ 
+    max-width: 95vw; 
+    height: 90vh;
+    margin: 1.75rem auto;
+}}
 
-/* Map Controls */
+#mapModal .modal-content {{ 
+    height: 100%; 
+}}
+
+#mapModal .modal-body {{ 
+    padding: 0; 
+    height: calc(100% - 60px);
+    position: relative;
+}}
+
+#wellMap {{ 
+    height: 100% !important; 
+    width: 100% !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}}
+
+/* Map Controls - Higher z-index to float above map */
 .map-controls {{ 
     position: absolute; 
     top: 10px; 
@@ -1587,9 +1613,16 @@ table.dataTable td .well-link:hover {
     background: white; 
     padding: 10px; 
     border-radius: 5px; 
-    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 }}
-.map-controls label {{ margin-right: 10px; font-size: 0.9rem; }}
+.map-controls label {{ 
+    margin-right: 10px; 
+    margin-bottom: 0;
+    font-size: 0.9rem; 
+    cursor: pointer;
+}}
+
+/* Map Legend - Higher z-index to float above map */
 .map-legend {{ 
     position: absolute; 
     bottom: 20px; 
@@ -1598,17 +1631,28 @@ table.dataTable td .well-link:hover {
     background: white; 
     padding: 10px; 
     border-radius: 5px; 
-    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
-    font-size: 0.8rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    font-size: 0.85rem;
 }}
-.legend-item {{ display: flex; align-items: center; margin-bottom: 3px; }}
-.legend-color {{ width: 12px; height: 12px; border-radius: 50%; margin-right: 5px; }}
+.legend-item {{ 
+    display: flex; 
+    align-items: center; 
+    margin-bottom: 5px; 
+}}
+.legend-item:last-child {{
+    margin-bottom: 0;
+}}
+.legend-color {{ 
+    width: 14px; 
+    height: 14px; 
+    border-radius: 50%; 
+    margin-right: 8px; 
+    border: 1px solid rgba(0,0,0,0.2);
+}}
 
-/* Help window styles */
 #help-window .card-body {{ font-size: 0.9rem; }}
 #help-window .card-body ul {{ padding-left: 20px; }}
 
-/* Responsive adjustments */
 @media (max-width: 768px) {{
     .map-controls {{ 
         position: relative; 
@@ -1618,7 +1662,10 @@ table.dataTable td .well-link:hover {
         position: relative;
         margin-top: 10px;
     }}
-    #wellMap {{ height: 60vh; }}
+    #wellMap {{ 
+        height: 70vh !important;
+        min-height: 400px;
+    }}
 }}
 </style>
 
@@ -1630,7 +1677,9 @@ table.dataTable td .well-link:hover {
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 </head><body>
 <div class="container-fluid py-4">
@@ -1759,32 +1808,46 @@ html_parts.append("</div>") # end tab-content
 html_parts.append(f"""
 <!-- Map Modal -->
 <div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-fullscreen-lg-down">
-    <div class="modal-content">
+  <div class="modal-dialog modal-xl" style="max-width: 95vw; height: 90vh; margin: 1.75rem auto;">
+    <div class="modal-content" style="height: 100%;">
       <div class="modal-header">
         <h5 class="modal-title" id="mapModalLabel">Interactive Well Risk Map - Multi-Station Analysis</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body position-relative">
-        <div class="map-controls">
-          <label><input type="checkbox" id="clusterToggle" checked> Cluster markers</label>
-          <label><input type="checkbox" id="criticalOnly"> Critical/High risk only</label>
+      <div class="modal-body p-0" style="height: calc(100% - 60px); position: relative;">
+        <div id="wellMap" style="height: 100%; width: 100%;"></div>
+      </div>
+      <div class="map-controls" style="position: fixed; top: 80px; right: 30px; z-index: 2000; background: white; padding: 12px; border-radius: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <label style="margin-right: 15px; margin-bottom: 0; cursor: pointer;"><input type="checkbox" id="clusterToggle" checked> Cluster markers</label>
+        <label style="margin-bottom: 0; cursor: pointer;"><input type="checkbox" id="criticalOnly"> Critical/High risk only</label>
+      </div>
+      <div class="map-legend" style="position: fixed; bottom: 40px; right: 30px; z-index: 2000; background: white; padding: 12px; border-radius: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); font-size: 0.85rem;">
+        <strong>Risk Levels:</strong><br>
+        <div style="display: flex; align-items: center; margin-top: 8px; margin-bottom: 4px;">
+          <div style="width: 14px; height: 14px; border-radius: 50%; background-color: red; margin-right: 8px; border: 1px solid #ccc;"></div>
+          <span>Critical</span>
         </div>
-        <div id="wellMap"></div>
-        <div class="map-legend">
-          <strong>Risk Levels (Post-Drought Stress):</strong><br>
-          <div class="legend-item"><div class="legend-color" style="background-color: red;"></div>Critical</div>
-          <div class="legend-item"><div class="legend-color" style="background-color: orange;"></div>High Risk</div>
-          <div class="legend-item"><div class="legend-color" style="background-color: yellow;"></div>Moderate Risk</div>
-          <div class="legend-item"><div class="legend-color" style="background-color: green;"></div>Low Risk</div>
-          <div class="legend-item"><div class="legend-color" style="background-color: gray;"></div>No Data</div>
+        <div style="display: flex; align-items: center; margin-bottom: 4px;">
+          <div style="width: 14px; height: 14px; border-radius: 50%; background-color: orange; margin-right: 8px; border: 1px solid #ccc;"></div>
+          <span>High Risk</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 4px;">
+          <div style="width: 14px; height: 14px; border-radius: 50%; background-color: yellow; margin-right: 8px; border: 1px solid #ccc;"></div>
+          <span>Moderate Risk</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 4px;">
+          <div style="width: 14px; height: 14px; border-radius: 50%; background-color: green; margin-right: 8px; border: 1px solid #ccc;"></div>
+          <span>Low Risk</span>
+        </div>
+        <div style="display: flex; align-items: center;">
+          <div style="width: 14px; height: 14px; border-radius: 50%; background-color: gray; margin-right: 8px; border: 1px solid #ccc;"></div>
+          <span>No Data</span>
         </div>
       </div>
     </div>
   </div>
 </div>
 """)
-
 html_parts.append("</div>") # end container
 
 # Inject column definitions and define the data file paths
@@ -1814,7 +1877,6 @@ $(document).ready(function() {
         return response.json();
     })
     .then(allWellsData => {
-        // Initialize the large table from JSON data after fetching
         currentTable = $('#all_wells_table').DataTable({
             data: allWellsData,
             columns: dtColumns,
@@ -1824,10 +1886,9 @@ $(document).ready(function() {
             buttons: ['copy', 'csv', 'excel', 'print'],
             scrollX: true,
             responsive: true,
-            order: [[findColumnIndex('buffer_m'), 'asc']] // Sort by buffer_m ascending (most critical first)
+            order: [[findColumnIndex('buffer_m'), 'asc']]
         });
         
-        // Add row selection event to sync with map
         $('#all_wells_table tbody').on('click', 'tr', function() {
             if ($(this).hasClass('selected')) {
                 $(this).removeClass('selected');
@@ -1835,7 +1896,6 @@ $(document).ready(function() {
                 currentTable.$('tr.selected').removeClass('selected');
                 $(this).addClass('selected');
                 
-                // If map is open, try to highlight the corresponding well
                 const data = currentTable.row(this).data();
                 if (map && data && data.WELL_ID) {
                     highlightWellOnMap(data.WELL_ID);
@@ -1845,7 +1905,7 @@ $(document).ready(function() {
     })
     .catch(error => {
         console.error("Error initializing dashboard:", error);
-        $('#all_wells_table').html("<p style='color:red;'>Error: Could not load well data. Ensure 'wells_data.json' is present alongside the HTML report.</p>");
+        $('#all_wells_table').html("<p style='color:red;'>Error: Could not load well data.</p>");
     });
 
   // Load map data
@@ -1857,6 +1917,7 @@ $(document).ready(function() {
     })
     .catch(error => {
         console.error("Error loading map data:", error);
+        alert('Error loading map data. Map will not be available.');
     });
 
   // Initialize smaller tables
@@ -1869,54 +1930,113 @@ $(document).ready(function() {
   });
 });
 
-// Helper function to find column index by name
 function findColumnIndex(columnName) {
     for (let i = 0; i < dtColumns.length; i++) {
         if (dtColumns[i].data === columnName) {
             return i;
         }
     }
-    return 0; // Default to first column
+    return 0;
 }
 
-// Initialize map when modal is shown
+// Initialize map when modal is FULLY shown (after animation completes)
 $('#mapModal').on('shown.bs.modal', function () {
+    console.log('Map modal opened');
+    
     if (!map) {
-        initializeMap();
+        console.log('Initializing map for first time...');
+        // Small delay to ensure DOM is ready
+        setTimeout(() => {
+            try {
+                initializeMap();
+                console.log('Map initialized successfully');
+            } catch (error) {
+                console.error('Error initializing map:', error);
+                alert('Error loading map: ' + error.message);
+            }
+        }, 250);
     } else {
-        // Refresh map size in case of layout changes
-        setTimeout(() => map.invalidateSize(), 100);
+        console.log('Map already exists, refreshing...');
+        setTimeout(() => map.invalidateSize(), 250);
     }
 });
 
 function initializeMap() {
+    // Check if map container exists
+    const mapContainer = document.getElementById('wellMap');
+    if (!mapContainer) {
+        throw new Error('Map container not found');
+    }
+    
+    console.log('Map container found, creating map...');
+    
     // Initialize the map
-    map = L.map('wellMap').setView(mapCenter, 9);
+    map = L.map('wellMap', {
+        center: mapCenter,
+        zoom: 9,
+        scrollWheelZoom: true
+    });
+    
+    console.log('Map object created, adding tiles...');
     
     // Add OpenStreetMap tiles
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
     }).addTo(map);
+    
+    console.log('Tiles added, creating marker layers...');
     
     // Initialize cluster group
     clusterGroup = L.markerClusterGroup({
         maxClusterRadius: 50,
         spiderfyOnMaxZoom: true,
-        showCoverageOnHover: false
+        showCoverageOnHover: false,
+        disableClusteringAtZoom: 15
     });
     
     // Initialize regular marker layer group
     markersLayer = L.layerGroup();
     
+    console.log('Loading markers...');
+    
     // Load markers
     loadMapMarkers();
     
+    console.log(`Markers loaded. Total wells in data: ${allMapData.length}`);
+    
     // Add event listeners for controls
-    document.getElementById('clusterToggle').addEventListener('change', toggleClustering);
-    document.getElementById('criticalOnly').addEventListener('change', filterMarkers);
+    const clusterToggle = document.getElementById('clusterToggle');
+    const criticalOnlyToggle = document.getElementById('criticalOnly');
+    
+    if (clusterToggle) {
+        clusterToggle.addEventListener('change', toggleClustering);
+    }
+    if (criticalOnlyToggle) {
+        criticalOnlyToggle.addEventListener('change', filterMarkers);
+    }
+    
+    // Force map to render
+    setTimeout(() => {
+        map.invalidateSize();
+        console.log('Map size invalidated');
+    }, 100);
 }
 
 function loadMapMarkers(filterCritical = false) {
+    console.log(`Loading markers (filter critical: ${filterCritical})...`);
+    
+    if (!map) {
+        console.error('Map not initialized yet');
+        return;
+    }
+    
+    if (allMapData.length === 0) {
+        console.warn('No map data available');
+        alert('No well location data available for mapping.');
+        return;
+    }
+    
     // Clear existing markers
     if (clusterGroup) clusterGroup.clearLayers();
     if (markersLayer) markersLayer.clearLayers();
@@ -1926,45 +2046,60 @@ function loadMapMarkers(filterCritical = false) {
         filteredData = allMapData.filter(well => 
             well.risk.includes('CRITICAL') || well.risk.includes('High risk')
         );
+        console.log(`Filtered to ${filteredData.length} critical/high risk wells`);
     }
     
     // Sort by risk priority (critical first)
     filteredData.sort((a, b) => a.risk_priority - b.risk_priority);
     
+    let markersAdded = 0;
     filteredData.forEach(well => {
-        const marker = L.circleMarker([well.lat, well.lng], {
-            radius: 6,
-            fillColor: well.color,
-            color: '#000',
-            weight: 1,
-            opacity: 1,
-            fillOpacity: 0.8
-        }).bindPopup(well.popup);
-        
-        // Store well ID for highlighting
-        marker.wellId = well.well_id;
-        
-        clusterGroup.addLayer(marker);
-        markersLayer.addLayer(marker);
+        try {
+            const marker = L.circleMarker([well.lat, well.lng], {
+                radius: 6,
+                fillColor: well.color,
+                color: '#000',
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.8
+            }).bindPopup(well.popup);
+            
+            marker.wellId = well.well_id;
+            
+            clusterGroup.addLayer(marker);
+            markersLayer.addLayer(marker);
+            markersAdded++;
+        } catch (error) {
+            console.error('Error adding marker:', error, well);
+        }
     });
     
+    console.log(`Added ${markersAdded} markers to map`);
+    
     // Add appropriate layer to map
-    const clusterEnabled = document.getElementById('clusterToggle')?.checked ?? true;
+    const clusterToggle = document.getElementById('clusterToggle');
+    const clusterEnabled = clusterToggle ? clusterToggle.checked : true;
+    
     if (clusterEnabled) {
         map.addLayer(clusterGroup);
         if (map.hasLayer(markersLayer)) {
             map.removeLayer(markersLayer);
         }
+        console.log('Using clustered markers');
     } else {
         map.addLayer(markersLayer);
         if (map.hasLayer(clusterGroup)) {
             map.removeLayer(clusterGroup);
         }
+        console.log('Using individual markers');
     }
 }
 
 function toggleClustering() {
+    if (!map) return;
+    
     const clusterEnabled = document.getElementById('clusterToggle').checked;
+    console.log(`Toggling clustering: ${clusterEnabled}`);
     
     if (clusterEnabled) {
         if (map.hasLayer(markersLayer)) {
@@ -1981,20 +2116,18 @@ function toggleClustering() {
 
 function filterMarkers() {
     const criticalOnly = document.getElementById('criticalOnly').checked;
+    console.log(`Filtering markers (critical only: ${criticalOnly})`);
     loadMapMarkers(criticalOnly);
 }
 
 function highlightWellOnMap(wellId) {
     if (!map) return;
     
-    // Find the well in map data
     const well = allMapData.find(w => w.well_id === wellId);
     if (!well) return;
     
-    // Pan to the well location
     map.setView([well.lat, well.lng], 12);
     
-    // Try to find and open the popup
     const currentLayer = map.hasLayer(clusterGroup) ? clusterGroup : markersLayer;
     currentLayer.eachLayer(layer => {
         if (layer.wellId === wellId) {
@@ -2002,11 +2135,6 @@ function highlightWellOnMap(wellId) {
         }
     });
 }
-
-// Cleanup when modal is hidden
-$('#mapModal').on('hidden.bs.modal', function () {
-    // Optional: Could clear selections or reset view
-});
 </script>
 """)
 
