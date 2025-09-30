@@ -129,10 +129,10 @@ table.dataTable td .well-link:hover {{
 <div class="container-fluid py-4">
 
 <h1 class='mb-3'>Colchester County Well Drying Risk Dashboard</h1>
-<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-29 22:49 | Wells mapped: 5000</p>
+<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-29 23:41 | Wells mapped: 5000</p>
 
-<div class="drought-status drought-default">
-    <strong>Regional Drought Status:</strong> ℹ️ HYDROMETRIC DATA UNAVAILABLE - Conservative drought assumptions applied
+<div class="drought-status drought-severe">
+    <strong>Regional Drought Status:</strong> 🚨 SEVERE DROUGHT CONDITIONS - 67%+ of monitoring stations show critical low flows
 </div>
 
 
@@ -182,9 +182,9 @@ table.dataTable td .well-link:hover {{
 
 <div class="row">
   <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">9013</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">1441</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">13</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">38.32</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">1454</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">24</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">36.32</div></div></div>
 </div>
 
 
@@ -219,19 +219,19 @@ table.dataTable td .well-link:hover {{
     </tr>
     <tr>
       <td>Low risk - &gt;5m buffer</td>
-      <td>2082</td>
+      <td>2051</td>
     </tr>
     <tr>
       <td>CRITICAL - Well may be dry</td>
-      <td>1441</td>
+      <td>1454</td>
     </tr>
     <tr>
       <td>Moderate risk - 2-5m buffer</td>
-      <td>32</td>
+      <td>39</td>
     </tr>
     <tr>
       <td>High risk - &lt;2m buffer</td>
-      <td>13</td>
+      <td>24</td>
     </tr>
   </tbody>
 </table>
@@ -259,18 +259,18 @@ table.dataTable td .well-link:hover {{
   <tbody>
     <tr>
       <th>Bedrock</th>
-      <td>983</td>
-      <td>8</td>
-      <td>1615</td>
-      <td>11</td>
+      <td>991</td>
+      <td>9</td>
+      <td>1599</td>
+      <td>18</td>
       <td>4201</td>
     </tr>
     <tr>
       <th>Surficial</th>
-      <td>454</td>
-      <td>5</td>
-      <td>452</td>
-      <td>20</td>
+      <td>459</td>
+      <td>14</td>
+      <td>437</td>
+      <td>21</td>
       <td>1158</td>
     </tr>
   </tbody>
@@ -310,7 +310,7 @@ table.dataTable td .well-link:hover {{
 const dtColumns = [{"data": "WELL_ID", "title": "WELL_ID"}, {"data": "location_display", "title": "location_display"}, {"data": "Map Link", "title": "Map Link"}, {"data": "DEPTH", "title": "DEPTH"}, {"data": "STATIC_WATER_LEVEL", "title": "STATIC_WATER_LEVEL"}, {"data": "STATIC_WATER_LEVEL_ORIGINAL", "title": "STATIC_WATER_LEVEL_ORIGINAL"}, {"data": "current_water_level_m_observed", "title": "current_water_level_m_observed"}, {"data": "drought_drawdown_m", "title": "drought_drawdown_m"}, {"data": "stressed_water_level_m", "title": "stressed_water_level_m"}, {"data": "pump_depth_m", "title": "pump_depth_m"}, {"data": "buffer_m", "title": "buffer_m"}, {"data": "drying_risk", "title": "drying_risk"}, {"data": "YIELD", "title": "YIELD"}, {"data": "yield_category", "title": "yield_category"}, {"data": "aquifer_type", "title": "aquifer_type"}]; 
 const dataJsonFile = 'wells_data.json';
 const mapDataFile = 'wells_map_data.json';
-const mapCenter = [45.39162788883833, -63.379044335134104];
+const mapCenter = [45.39068871214575, -63.38198117221623];
 </script>
 
 <script>
@@ -319,6 +319,16 @@ let markersLayer = null;
 let clusterGroup = null;
 let allMapData = [];
 let currentTable = null;
+
+// Add the missing findColumnIndex function
+function findColumnIndex(columnName) {
+    for (let i = 0; i < dtColumns.length; i++) {
+        if (dtColumns[i].data === columnName) {
+            return i;
+        }
+    }
+    return 0;
+}
 
 $(document).ready(function() {
   // Load table data
@@ -363,14 +373,18 @@ $(document).ready(function() {
 
   // Load map data
   fetch(mapDataFile)
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Failed to load map data: ' + response.statusText);
+        }
+        return response.json();
+    })
     .then(mapData => {
         allMapData = mapData;
         console.log(`Loaded ${allMapData.length} wells for mapping`);
     })
     .catch(error => {
         console.error("Error loading map data:", error);
-        alert('Error loading map data. Map will not be available.');
     });
 
   // Initialize smaller tables
@@ -383,29 +397,22 @@ $(document).ready(function() {
   });
 });
 
-function findColumnIndex(columnName) {
-    for (let i = 0; i < dtColumns.length; i++) {
-        if (dtColumns[i].data === columnName) {
-            return i;
-        }
-    }
-    return 0;
-}
-
-// Initialize map when modal is FULLY shown (after animation completes)
 $('#mapModal').on('shown.bs.modal', function () {
     console.log('Map modal opened');
     
     if (!map) {
         console.log('Initializing map for first time...');
-        // Small delay to ensure DOM is ready
         setTimeout(() => {
             try {
+                if (allMapData.length === 0) {
+                    $('#wellMap').html('<div class="alert alert-warning m-3">Map data is still loading. Please close and reopen the map modal.</div>');
+                    return;
+                }
                 initializeMap();
                 console.log('Map initialized successfully');
             } catch (error) {
                 console.error('Error initializing map:', error);
-                alert('Error loading map: ' + error.message);
+                $('#wellMap').html('<div class="alert alert-danger m-3">Error loading map: ' + error.message + '</div>');
             }
         }, 250);
     } else {
@@ -415,32 +422,27 @@ $('#mapModal').on('shown.bs.modal', function () {
 });
 
 function initializeMap() {
-    // Check if map container exists
     const mapContainer = document.getElementById('wellMap');
     if (!mapContainer) {
         throw new Error('Map container not found');
     }
     
-    console.log('Map container found, creating map...');
+    console.log('Creating map...');
     
-    // Initialize the map
-    map = L.map('wellMap', {
-        center: mapCenter,
-        zoom: 9,
-        scrollWheelZoom: true
-    });
+    // Create map
+    map = L.map('wellMap').setView(mapCenter, 9);
     
-    console.log('Map object created, adding tiles...');
+    console.log('Adding tile layer...');
     
-    // Add OpenStreetMap tiles
+    // Add tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
     }).addTo(map);
     
-    console.log('Tiles added, creating marker layers...');
+    console.log('Creating marker layers...');
     
-    // Initialize cluster group
+    // Create marker layers
     clusterGroup = L.markerClusterGroup({
         maxClusterRadius: 50,
         spiderfyOnMaxZoom: true,
@@ -448,17 +450,12 @@ function initializeMap() {
         disableClusteringAtZoom: 15
     });
     
-    // Initialize regular marker layer group
     markersLayer = L.layerGroup();
     
     console.log('Loading markers...');
-    
-    // Load markers
     loadMapMarkers();
     
-    console.log(`Markers loaded. Total wells in data: ${allMapData.length}`);
-    
-    // Add event listeners for controls
+    // Add event listeners
     const clusterToggle = document.getElementById('clusterToggle');
     const criticalOnlyToggle = document.getElementById('criticalOnly');
     
@@ -469,11 +466,8 @@ function initializeMap() {
         criticalOnlyToggle.addEventListener('change', filterMarkers);
     }
     
-    // Force map to render
-    setTimeout(() => {
-        map.invalidateSize();
-        console.log('Map size invalidated');
-    }, 100);
+    // Force map resize
+    setTimeout(() => map.invalidateSize(), 100);
 }
 
 function loadMapMarkers(filterCritical = false) {
@@ -486,7 +480,6 @@ function loadMapMarkers(filterCritical = false) {
     
     if (allMapData.length === 0) {
         console.warn('No map data available');
-        alert('No well location data available for mapping.');
         return;
     }
     
@@ -502,7 +495,6 @@ function loadMapMarkers(filterCritical = false) {
         console.log(`Filtered to ${filteredData.length} critical/high risk wells`);
     }
     
-    // Sort by risk priority (critical first)
     filteredData.sort((a, b) => a.risk_priority - b.risk_priority);
     
     let markersAdded = 0;
@@ -529,22 +521,14 @@ function loadMapMarkers(filterCritical = false) {
     
     console.log(`Added ${markersAdded} markers to map`);
     
-    // Add appropriate layer to map
+    // Add appropriate layer
     const clusterToggle = document.getElementById('clusterToggle');
     const clusterEnabled = clusterToggle ? clusterToggle.checked : true;
     
     if (clusterEnabled) {
         map.addLayer(clusterGroup);
-        if (map.hasLayer(markersLayer)) {
-            map.removeLayer(markersLayer);
-        }
-        console.log('Using clustered markers');
     } else {
         map.addLayer(markersLayer);
-        if (map.hasLayer(clusterGroup)) {
-            map.removeLayer(clusterGroup);
-        }
-        console.log('Using individual markers');
     }
 }
 
