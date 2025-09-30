@@ -811,6 +811,8 @@ print(f"\nDetailed results saved to {output_csv}")
 
 # Replace the generate_detailed_well_report function and related code with this:
 
+# Replace the generate_detailed_well_report function and related code with this:
+
 import pathlib
 from string import Template
 
@@ -1227,24 +1229,6 @@ report_dir.mkdir(exist_ok=True)
 # Generate reports for all wells using the template
 print("\n=== GENERATING WELL REPORTS FROM TEMPLATE ===")
 report_count = 0
-for _, row in results.iterrows():
-    try:
-        well_id = str(row.get("WELL_ID", "Unknown")).replace('<a href="well_reports/well_', '').replace('.html" target="_blank">', '').replace(' 📊</a>', '')
-        fname = report_dir / f"well_{well_id}.html"
-        
-        # Generate report from template
-        report_html = generate_well_report_from_template(row, WELL_REPORT_TEMPLATE)
-        
-        # Write to file
-        with open(fname, "w", encoding="utf-8") as f:
-            f.write(report_html)
-        
-        report_count += 1
-    except Exception as e:
-        well_id = str(row.get("WELL_ID", "Unknown"))
-        print(f"Warning: Could not generate report for well {well_id}: {e}")
-
-print(f"Generated {report_count} well reports from template in {report_dir}/")
 
 # ---------------------------
 # 10. Prepare map data for wells with valid coordinates
@@ -1465,21 +1449,18 @@ map_wells_data = prepare_map_data(wells)
 
 def create_well_report_link(well_id):
     """Create a clickable well ID with report icon"""
-    # Clean the well_id in case it's already been processed
     clean_id = str(well_id).strip()
     
     # Remove any existing HTML if it's already been processed
     if '<a href=' in clean_id:
-        # Extract just the ID from existing HTML
         match = re.search(r'well_([^\.]+)\.html', clean_id)
         if match:
             clean_id = match.group(1)
         else:
-            # Fallback: try to extract text between tags
             clean_id = re.sub(r'<[^>]+>', '', clean_id).strip()
     
-    # Create the link with report icon
-    return f'<a href="well_reports/well_{clean_id}.html" target="_blank" class="well-link" title="View detailed report for well {clean_id}">{clean_id} 📊</a>'
+    # Link to single template with URL parameter
+    return f'<a href="well_report_template.html?id={clean_id}" target="_blank" class="well-link" title="View detailed report">{clean_id} 📊</a>'
 
 # ---------------------------
 # UPDATED HTML TABLE PREPARATION
@@ -1853,6 +1834,16 @@ let clusterGroup = null;
 let allMapData = [];
 let currentTable = null;
 
+// Add the missing findColumnIndex function
+function findColumnIndex(columnName) {
+    for (let i = 0; i < dtColumns.length; i++) {
+        if (dtColumns[i].data === columnName) {
+            return i;
+        }
+    }
+    return 0;
+}
+
 $(document).ready(function() {
   // Load table data
   fetch(dataJsonFile)
@@ -1896,14 +1887,18 @@ $(document).ready(function() {
 
   // Load map data
   fetch(mapDataFile)
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Failed to load map data: ' + response.statusText);
+        }
+        return response.json();
+    })
     .then(mapData => {
         allMapData = mapData;
         console.log(`Loaded ${allMapData.length} wells for mapping`);
     })
     .catch(error => {
         console.error("Error loading map data:", error);
-        alert('Error loading map data. Map will not be available.');
     });
 
   // Initialize smaller tables
@@ -1916,29 +1911,22 @@ $(document).ready(function() {
   });
 });
 
-function findColumnIndex(columnName) {
-    for (let i = 0; i < dtColumns.length; i++) {
-        if (dtColumns[i].data === columnName) {
-            return i;
-        }
-    }
-    return 0;
-}
-
-// Initialize map when modal is FULLY shown (after animation completes)
 $('#mapModal').on('shown.bs.modal', function () {
     console.log('Map modal opened');
     
     if (!map) {
         console.log('Initializing map for first time...');
-        // Small delay to ensure DOM is ready
         setTimeout(() => {
             try {
+                if (allMapData.length === 0) {
+                    $('#wellMap').html('<div class="alert alert-warning m-3">Map data is still loading. Please close and reopen the map modal.</div>');
+                    return;
+                }
                 initializeMap();
                 console.log('Map initialized successfully');
             } catch (error) {
                 console.error('Error initializing map:', error);
-                alert('Error loading map: ' + error.message);
+                $('#wellMap').html('<div class="alert alert-danger m-3">Error loading map: ' + error.message + '</div>');
             }
         }, 250);
     } else {
@@ -1948,32 +1936,27 @@ $('#mapModal').on('shown.bs.modal', function () {
 });
 
 function initializeMap() {
-    // Check if map container exists
     const mapContainer = document.getElementById('wellMap');
     if (!mapContainer) {
         throw new Error('Map container not found');
     }
     
-    console.log('Map container found, creating map...');
+    console.log('Creating map...');
     
-    // Initialize the map
-    map = L.map('wellMap', {
-        center: mapCenter,
-        zoom: 9,
-        scrollWheelZoom: true
-    });
+    // Create map
+    map = L.map('wellMap').setView(mapCenter, 9);
     
-    console.log('Map object created, adding tiles...');
+    console.log('Adding tile layer...');
     
-    // Add OpenStreetMap tiles
+    // Add tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
     }).addTo(map);
     
-    console.log('Tiles added, creating marker layers...');
+    console.log('Creating marker layers...');
     
-    // Initialize cluster group
+    // Create marker layers
     clusterGroup = L.markerClusterGroup({
         maxClusterRadius: 50,
         spiderfyOnMaxZoom: true,
@@ -1981,17 +1964,12 @@ function initializeMap() {
         disableClusteringAtZoom: 15
     });
     
-    // Initialize regular marker layer group
     markersLayer = L.layerGroup();
     
     console.log('Loading markers...');
-    
-    // Load markers
     loadMapMarkers();
     
-    console.log(`Markers loaded. Total wells in data: ${allMapData.length}`);
-    
-    // Add event listeners for controls
+    // Add event listeners
     const clusterToggle = document.getElementById('clusterToggle');
     const criticalOnlyToggle = document.getElementById('criticalOnly');
     
@@ -2002,11 +1980,8 @@ function initializeMap() {
         criticalOnlyToggle.addEventListener('change', filterMarkers);
     }
     
-    // Force map to render
-    setTimeout(() => {
-        map.invalidateSize();
-        console.log('Map size invalidated');
-    }, 100);
+    // Force map resize
+    setTimeout(() => map.invalidateSize(), 100);
 }
 
 function loadMapMarkers(filterCritical = false) {
@@ -2019,7 +1994,6 @@ function loadMapMarkers(filterCritical = false) {
     
     if (allMapData.length === 0) {
         console.warn('No map data available');
-        alert('No well location data available for mapping.');
         return;
     }
     
@@ -2035,7 +2009,6 @@ function loadMapMarkers(filterCritical = false) {
         console.log(`Filtered to ${filteredData.length} critical/high risk wells`);
     }
     
-    // Sort by risk priority (critical first)
     filteredData.sort((a, b) => a.risk_priority - b.risk_priority);
     
     let markersAdded = 0;
@@ -2062,22 +2035,14 @@ function loadMapMarkers(filterCritical = false) {
     
     console.log(`Added ${markersAdded} markers to map`);
     
-    // Add appropriate layer to map
+    // Add appropriate layer
     const clusterToggle = document.getElementById('clusterToggle');
     const clusterEnabled = clusterToggle ? clusterToggle.checked : true;
     
     if (clusterEnabled) {
         map.addLayer(clusterGroup);
-        if (map.hasLayer(markersLayer)) {
-            map.removeLayer(markersLayer);
-        }
-        console.log('Using clustered markers');
     } else {
         map.addLayer(markersLayer);
-        if (map.hasLayer(clusterGroup)) {
-            map.removeLayer(clusterGroup);
-        }
-        console.log('Using individual markers');
     }
 }
 
