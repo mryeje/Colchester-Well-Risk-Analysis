@@ -809,233 +809,33 @@ results = wells[out_cols].sort_values("buffer_m", ascending=True)
 results.to_csv(output_csv, index=False)
 print(f"\nDetailed results saved to {output_csv}")
 
+# Replace the generate_detailed_well_report function and related code with this:
+
 import pathlib
+from string import Template
 
 # ---------------------------
-# ENHANCED WELL REPORT GENERATION
+# WELL REPORT TEMPLATE (Single HTML Template)
 # ---------------------------
 
-def generate_detailed_well_report(row):
-    """Generate a comprehensive, layman-friendly report for a single well"""
-    
-    well_id = str(row.get("WELL_ID", "Unknown")).replace('<a href="well_reports/well_', '').replace('.html" target="_blank">', '').replace(' 📊</a>', '')
-    fname = report_dir / f"well_{well_id}.html"
-    
-    # Helper functions for safe data formatting
-    def safe_get(key, default="N/A"):
-        value = row.get(key, default)
-        if pd.isna(value) or value == "nan" or value == "":
-            return default
-        return value
-    
-    def format_number(value, unit="", decimals=1):
-        try:
-            if pd.isna(value) or value == "nan":
-                return "N/A"
-            return f"{float(value):.{decimals}f}{unit}"
-        except:
-            return "N/A"
-    
-    # Extract key values
-    well_depth = safe_get("DEPTH")
-    static_level = safe_get("STATIC_WATER_LEVEL") 
-    current_level = safe_get("current_water_level_m_observed")
-    stressed_level = safe_get("stressed_water_level_m")
-    pump_depth = safe_get("pump_depth_m")
-    buffer_m = safe_get("buffer_m")
-    risk_level = safe_get("drying_risk")
-    drought_stress = safe_get("drought_drawdown_m")
-    yield_val = safe_get("YIELD")
-    aquifer_type = safe_get("aquifer_type", "Unknown")
-    location = safe_get("location_display", "Location not specified")
-    
-    # Determine risk color and explanation
-    risk_color = "green"
-    risk_explanation = ""
-    risk_recommendations = ""
-    
-    if "CRITICAL" in str(risk_level):
-        risk_color = "#d32f2f"
-        risk_explanation = """
-        <strong>CRITICAL RISK:</strong> Your well is at immediate risk of running dry. The water level may already be at or below 
-        your pump depth, which means your pump may be drawing air instead of water. This requires immediate attention.
-        """
-        risk_recommendations = """
-        <h4>Immediate Actions Needed:</h4>
-        <ul>
-            <li><strong>Contact a well professional immediately</strong> - Don't wait</li>
-            <li><strong>Reduce water usage</strong> to absolute essentials only</li>
-            <li><strong>Check your pump</strong> - If it's running but no water comes out, turn it off to prevent damage</li>
-            <li><strong>Consider emergency water supply</strong> options (bottled water, neighbors, etc.)</li>
-            <li><strong>Pump lowering may be needed</strong> if there's enough water deeper in the well</li>
-            <li><strong>Well deepening</strong> might be required if the aquifer allows</li>
-        </ul>
-        """
-    elif "High risk" in str(risk_level):
-        risk_color = "#f57c00"
-        risk_explanation = """
-        <strong>HIGH RISK:</strong> Your well has a very small safety margin. During dry periods or with increased usage, 
-        your well could run dry. The pump is close to the water level, leaving little room for error.
-        """
-        risk_recommendations = """
-        <h4>Recommended Actions:</h4>
-        <ul>
-            <li><strong>Monitor water levels closely</strong> - Watch for changes in flow or pressure</li>
-            <li><strong>Implement water conservation</strong> measures immediately</li>
-            <li><strong>Get a professional assessment</strong> within the next few weeks</li>
-            <li><strong>Consider pump lowering</strong> as a preventive measure</li>
-            <li><strong>Install a low-water alarm</strong> to warn before the well runs dry</li>
-            <li><strong>Have an emergency water plan</strong> ready</li>
-        </ul>
-        """
-    elif "Moderate risk" in str(risk_level):
-        risk_color = "#fbc02d"
-        risk_explanation = """
-        <strong>MODERATE RISK:</strong> Your well has some safety margin, but it's worth monitoring. During severe droughts 
-        or if your water usage increases significantly, you might experience problems.
-        """
-        risk_recommendations = """
-        <h4>Recommended Actions:</h4>
-        <ul>
-            <li><strong>Practice water conservation</strong> during dry periods</li>
-            <li><strong>Monitor your well</strong> for signs of declining water levels</li>
-            <li><strong>Plan for professional assessment</strong> within the next year</li>
-            <li><strong>Be prepared</strong> with water conservation measures during droughts</li>
-            <li><strong>Consider efficiency upgrades</strong> for appliances and fixtures</li>
-        </ul>
-        """
-    else:  # Low risk
-        risk_color = "#388e3c"
-        risk_explanation = """
-        <strong>LOW RISK:</strong> Your well has a good safety margin. Even during dry periods, you should have adequate water supply.
-        This doesn't mean unlimited water, but you're in a relatively secure position.
-        """
-        risk_recommendations = """
-        <h4>Recommended Actions:</h4>
-        <ul>
-            <li><strong>Continue regular maintenance</strong> of your well system</li>
-            <li><strong>Monitor periodically</strong> for any changes</li>
-            <li><strong>Practice reasonable water conservation</strong> as good stewardship</li>
-            <li><strong>Consider a professional checkup</strong> every 3-5 years</li>
-        </ul>
-        """
-    
-    # Aquifer explanation
-    aquifer_explanation = ""
-    if aquifer_type == "Bedrock":
-        aquifer_explanation = """
-        Your well draws water from <strong>bedrock aquifers</strong> - water stored in cracks and fractures in solid rock. 
-        These wells can be very reliable but may be more susceptible to seasonal variations and take longer to recover 
-        after heavy use.
-        """
-    elif aquifer_type == "Surficial":
-        aquifer_explanation = """
-        Your well draws water from <strong>surficial aquifers</strong> - water stored in soil, sand, and gravel near the surface. 
-        These wells often recharge more quickly from rainfall but may be more sensitive to dry periods.
-        """
-    else:
-        aquifer_explanation = """
-        The aquifer type for your well is not determined in our records. This could be either bedrock (water from rock fractures) 
-        or surficial (water from soil/sand layers). A well professional can help determine this.
-        """
-    
-    # Drought stress explanation
-    drought_explanation = ""
-    try:
-        drought_value = float(drought_stress)
-        if drought_value > 3.0:
-            drought_explanation = f"""
-            <strong>Severe Regional Drought Conditions:</strong> Our analysis shows that most area rivers and streams 
-            are experiencing critically low flows. We've applied an additional {drought_value:.1f} meters of stress testing 
-            to your well to simulate these harsh conditions.
-            """
-        elif drought_value > 2.5:
-            drought_explanation = f"""
-            <strong>Moderate Regional Drought Conditions:</strong> Some area waterways are showing stress. We've applied 
-            an additional {drought_value:.1f} meters of stress testing to simulate continued dry conditions.
-            """
-        else:
-            drought_explanation = f"""
-            <strong>Normal Conditions:</strong> Area waterways are at normal levels. We've applied a standard 
-            {drought_value:.1f} meters of drought stress testing as a precautionary measure.
-            """
-    except:
-        drought_explanation = "We've applied standard drought stress testing to simulate dry conditions."
-    
-    # Yield explanation
-    yield_explanation = ""
-    if yield_val and yield_val != "N/A":
-        try:
-            yield_num = float(yield_val)
-            if yield_num < 5:
-                yield_explanation = f"""
-                <strong>Low Yield Well:</strong> Your well produces {yield_num} L/min, which is considered low. This means 
-                you need to be especially careful about water usage and may need to spread out high-demand activities 
-                (like laundry, showers) throughout the day.
-                """
-            elif yield_num < 10:
-                yield_explanation = f"""
-                <strong>Moderate Yield Well:</strong> Your well produces {yield_num} L/min, which is adequate for most 
-                household needs with reasonable usage patterns.
-                """
-            else:
-                yield_explanation = f"""
-                <strong>Good Yield Well:</strong> Your well produces {yield_num} L/min, which should meet typical 
-                household water needs comfortably.
-                """
-        except:
-            yield_explanation = f"Your well's yield is recorded as {yield_val} L/min."
-    else:
-        yield_explanation = "The flow rate (yield) of your well is not available in our records."
-    
-    # Technical summary for those who want details
-    technical_summary = f"""
-    <div class="tech-details">
-        <h4>Technical Details (for reference)</h4>
-        <div class="row">
-            <div class="col-md-6">
-                <p><strong>Total Well Depth:</strong> {format_number(well_depth, 'm')}</p>
-                <p><strong>Original Static Water Level:</strong> {format_number(static_level, 'm')}</p>
-                <p><strong>Current Water Level:</strong> {format_number(current_level, 'm')}</p>
-                <p><strong>Stressed Water Level:</strong> {format_number(stressed_level, 'm')}</p>
-            </div>
-            <div class="col-md-6">
-                <p><strong>Estimated Pump Depth:</strong> {format_number(pump_depth, 'm')}</p>
-                <p><strong>Safety Buffer:</strong> {format_number(buffer_m, 'm')}</p>
-                <p><strong>Drought Stress Applied:</strong> {format_number(drought_stress, 'm')}</p>
-                <p><strong>Well Yield:</strong> {format_number(yield_val, ' L/min')}</p>
-            </div>
-        </div>
-        <p><em>Note: Water levels are measured as depth below ground surface. Larger numbers mean deeper water.</em></p>
-    </div>
-    """
-    
-    # Generate the HTML report
-    html_content = f"""<!DOCTYPE html>
+WELL_REPORT_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Well Report - {well_id}</title>
+    <title>Well Report - $well_id</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
-          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
-          crossorigin=""/>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <style>
-        body {{ font-family: Georgia, serif; background-color: #f8f9fa; }}
-        .risk-header {{ color: {risk_color}; border-left: 4px solid {risk_color}; padding-left: 15px; }}
-        .info-section {{ background: white; border-radius: 8px; padding: 20px; margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-        .tech-details {{ background: #f8f9fa; border-radius: 8px; padding: 15px; margin-top: 20px; }}
-        .alert-custom {{ border-left: 4px solid {risk_color}; }}
-        h1, h2, h3, h4 {{ color: #2c3e50; }}
-        .back-button {{ position: fixed; top: 20px; right: 20px; z-index: 1000; }}
-        @media print {{ .back-button {{ display: none; }} }}
-        .key-finding {{ font-size: 1.1em; font-weight: bold; margin: 10px 0; }}
-        .explanation {{ line-height: 1.6; }}
+        body { font-family: Georgia, serif; background-color: #f8f9fa; }
+        .risk-header { color: $risk_color; border-left: 4px solid $risk_color; padding-left: 15px; }
+        .info-section { background: white; border-radius: 8px; padding: 20px; margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .tech-details { background: #f8f9fa; border-radius: 8px; padding: 15px; margin-top: 20px; }
+        .alert-custom { border-left: 4px solid $risk_color; }
+        h1, h2, h3, h4 { color: #2c3e50; }
+        .back-button { position: fixed; top: 20px; right: 20px; z-index: 1000; }
+        @media print { .back-button { display: none; } }
+        .key-finding { font-size: 1.1em; font-weight: bold; margin: 10px 0; }
+        .explanation { line-height: 1.6; }
     </style>
 </head>
 <body>
@@ -1047,40 +847,40 @@ def generate_detailed_well_report(row):
                 
                 <header class="text-center mb-4">
                     <h1>Well Risk Assessment Report</h1>
-                    <h2>Well ID: {well_id}</h2>
-                    <p class="text-muted">Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
+                    <h2>Well ID: $well_id</h2>
+                    <p class="text-muted">Generated: $timestamp</p>
                 </header>
                 
                 <div class="info-section alert alert-custom">
                     <div class="risk-header">
                         <h3>Your Well's Risk Status</h3>
                     </div>
-                    <div class="key-finding" style="color: {risk_color};">{risk_level}</div>
+                    <div class="key-finding" style="color: $risk_color;">$risk_level</div>
                     <div class="explanation">
-                        {risk_explanation}
+                        $risk_explanation
                     </div>
                 </div>
                 
                 <div class="info-section">
                     <h3>What This Means for You</h3>
                     <div class="explanation">
-                        {risk_recommendations}
+                        $risk_recommendations
                     </div>
                 </div>
                 
                 <div class="info-section">
                     <h3>About Your Well</h3>
                     <div class="explanation">
-                        <p><strong>Location:</strong> {location}</p>
+                        <p><strong>Location:</strong> $location</p>
                         
                         <h4>Water Source</h4>
-                        <p>{aquifer_explanation}</p>
+                        <p>$aquifer_explanation</p>
                         
                         <h4>Well Capacity</h4>
-                        <p>{yield_explanation}</p>
+                        <p>$yield_explanation</p>
                         
                         <h4>Current Conditions Assessment</h4>
-                        <p>{drought_explanation}</p>
+                        <p>$drought_explanation</p>
                     </div>
                 </div>
                 
@@ -1091,7 +891,7 @@ def generate_detailed_well_report(row):
                         is how much water is above the bottom of your straw (pump). If the water level drops below your straw, 
                         you'll suck air instead of water.</p>
                         
-                        <p><strong>Your current safety margin: {format_number(buffer_m, ' meters')}</strong></p>
+                        <p><strong>Your current safety margin: $buffer_display</strong></p>
                         
                         <ul>
                             <li><strong>Positive numbers are good</strong> - You have water above your pump</li>
@@ -1169,7 +969,7 @@ def generate_detailed_well_report(row):
                     </div>
                 </div>
                 
-                {technical_summary}
+                $technical_summary
                 
                 <div class="info-section">
                     <h3>About This Analysis</h3>
@@ -1198,27 +998,253 @@ def generate_detailed_well_report(row):
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>"""
+
+# ---------------------------
+# HELPER FUNCTIONS FOR TEMPLATE DATA
+# ---------------------------
+
+def safe_get(row, key, default="N/A"):
+    """Safely get a value from a row"""
+    value = row.get(key, default)
+    if pd.isna(value) or value == "nan" or value == "":
+        return default
+    return value
+
+def format_number(value, unit="", decimals=1):
+    """Format a number with units"""
+    try:
+        if pd.isna(value) or value == "nan":
+            return "N/A"
+        return f"{float(value):.{decimals}f}{unit}"
+    except:
+        return "N/A"
+
+def get_risk_color(risk_level):
+    """Get the color for a risk level"""
+    if "CRITICAL" in str(risk_level):
+        return "#d32f2f"
+    elif "High risk" in str(risk_level):
+        return "#f57c00"
+    elif "Moderate risk" in str(risk_level):
+        return "#fbc02d"
+    return "#388e3c"
+
+def get_risk_explanation(risk_level):
+    """Get the explanation for a risk level"""
+    explanations = {
+        "CRITICAL": """
+        <strong>CRITICAL RISK:</strong> Your well is at immediate risk of running dry. The water level may already be at or below 
+        your pump depth, which means your pump may be drawing air instead of water. This requires immediate attention.
+        """,
+        "High": """
+        <strong>HIGH RISK:</strong> Your well has a very small safety margin. During dry periods or with increased usage, 
+        your well could run dry. The pump is close to the water level, leaving little room for error.
+        """,
+        "Moderate": """
+        <strong>MODERATE RISK:</strong> Your well has some safety margin, but it's worth monitoring. During severe droughts 
+        or if your water usage increases significantly, you might experience problems.
+        """,
+        "Low": """
+        <strong>LOW RISK:</strong> Your well has a good safety margin. Even during dry periods, you should have adequate water supply.
+        This doesn't mean unlimited water, but you're in a relatively secure position.
+        """
+    }
     
-    # Write the report
-    with open(fname, "w", encoding="utf-8") as f:
-        f.write(html_content)
+    for key, explanation in explanations.items():
+        if key in str(risk_level):
+            return explanation
+    return "<strong>Unknown risk level.</strong>"
+
+def get_risk_recommendations(risk_level):
+    """Get recommendations based on risk level"""
+    if "CRITICAL" in str(risk_level):
+        return """
+        <h4>Immediate Actions Needed:</h4>
+        <ul>
+            <li><strong>Contact a well professional immediately</strong> - Don't wait</li>
+            <li><strong>Reduce water usage</strong> to absolute essentials only</li>
+            <li><strong>Check your pump</strong> - If it's running but no water comes out, turn it off to prevent damage</li>
+            <li><strong>Consider emergency water supply</strong> options (bottled water, neighbors, etc.)</li>
+            <li><strong>Pump lowering may be needed</strong> if there's enough water deeper in the well</li>
+            <li><strong>Well deepening</strong> might be required if the aquifer allows</li>
+        </ul>
+        """
+    elif "High risk" in str(risk_level):
+        return """
+        <h4>Recommended Actions:</h4>
+        <ul>
+            <li><strong>Monitor water levels closely</strong> - Watch for changes in flow or pressure</li>
+            <li><strong>Implement water conservation</strong> measures immediately</li>
+            <li><strong>Get a professional assessment</strong> within the next few weeks</li>
+            <li><strong>Consider pump lowering</strong> as a preventive measure</li>
+            <li><strong>Install a low-water alarm</strong> to warn before the well runs dry</li>
+            <li><strong>Have an emergency water plan</strong> ready</li>
+        </ul>
+        """
+    elif "Moderate risk" in str(risk_level):
+        return """
+        <h4>Recommended Actions:</h4>
+        <ul>
+            <li><strong>Practice water conservation</strong> during dry periods</li>
+            <li><strong>Monitor your well</strong> for signs of declining water levels</li>
+            <li><strong>Plan for professional assessment</strong> within the next year</li>
+            <li><strong>Be prepared</strong> with water conservation measures during droughts</li>
+            <li><strong>Consider efficiency upgrades</strong> for appliances and fixtures</li>
+        </ul>
+        """
+    return """
+        <h4>Recommended Actions:</h4>
+        <ul>
+            <li><strong>Continue regular maintenance</strong> of your well system</li>
+            <li><strong>Monitor periodically</strong> for any changes</li>
+            <li><strong>Practice reasonable water conservation</strong> as good stewardship</li>
+            <li><strong>Consider a professional checkup</strong> every 3-5 years</li>
+        </ul>
+        """
+
+def get_aquifer_explanation(aquifer_type):
+    """Get explanation for aquifer type"""
+    if aquifer_type == "Bedrock":
+        return """
+        Your well draws water from <strong>bedrock aquifers</strong> - water stored in cracks and fractures in solid rock. 
+        These wells can be very reliable but may be more susceptible to seasonal variations and take longer to recover 
+        after heavy use.
+        """
+    elif aquifer_type == "Surficial":
+        return """
+        Your well draws water from <strong>surficial aquifers</strong> - water stored in soil, sand, and gravel near the surface. 
+        These wells often recharge more quickly from rainfall but may be more sensitive to dry periods.
+        """
+    return """
+        The aquifer type for your well is not determined in our records. This could be either bedrock (water from rock fractures) 
+        or surficial (water from soil/sand layers). A well professional can help determine this.
+        """
+
+def get_yield_explanation(yield_val):
+    """Get explanation for well yield"""
+    if yield_val == "N/A":
+        return "The flow rate (yield) of your well is not available in our records."
+    
+    try:
+        yield_num = float(yield_val)
+        if yield_num < 5:
+            return f"""
+            <strong>Low Yield Well:</strong> Your well produces {yield_num} L/min, which is considered low. This means 
+            you need to be especially careful about water usage and may need to spread out high-demand activities 
+            (like laundry, showers) throughout the day.
+            """
+        elif yield_num < 10:
+            return f"""
+            <strong>Moderate Yield Well:</strong> Your well produces {yield_num} L/min, which is adequate for most 
+            household needs with reasonable usage patterns.
+            """
+        return f"""
+            <strong>Good Yield Well:</strong> Your well produces {yield_num} L/min, which should meet typical 
+            household water needs comfortably.
+            """
+    except:
+        return f"Your well's yield is recorded as {yield_val} L/min."
+
+def get_drought_explanation(drought_stress):
+    """Get explanation for drought stress"""
+    try:
+        drought_value = float(drought_stress)
+        if drought_value > 3.0:
+            return f"""
+            <strong>Severe Regional Drought Conditions:</strong> Our analysis shows that most area rivers and streams 
+            are experiencing critically low flows. We've applied an additional {drought_value:.1f} meters of stress testing 
+            to your well to simulate these harsh conditions.
+            """
+        elif drought_value > 2.5:
+            return f"""
+            <strong>Moderate Regional Drought Conditions:</strong> Some area waterways are showing stress. We've applied 
+            an additional {drought_value:.1f} meters of stress testing to simulate continued dry conditions.
+            """
+        return f"""
+            <strong>Normal Conditions:</strong> Area waterways are at normal levels. We've applied a standard 
+            {drought_value:.1f} meters of drought stress testing as a precautionary measure.
+            """
+    except:
+        return "We've applied standard drought stress testing to simulate dry conditions."
+
+def get_technical_summary(row):
+    """Generate technical details section"""
+    return f"""
+    <div class="tech-details">
+        <h4>Technical Details (for reference)</h4>
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Total Well Depth:</strong> {format_number(row.get('DEPTH'), 'm')}</p>
+                <p><strong>Original Static Water Level:</strong> {format_number(row.get('STATIC_WATER_LEVEL'), 'm')}</p>
+                <p><strong>Current Water Level:</strong> {format_number(row.get('current_water_level_m_observed'), 'm')}</p>
+                <p><strong>Stressed Water Level:</strong> {format_number(row.get('stressed_water_level_m'), 'm')}</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Estimated Pump Depth:</strong> {format_number(row.get('pump_depth_m'), 'm')}</p>
+                <p><strong>Safety Buffer:</strong> {format_number(row.get('buffer_m'), 'm')}</p>
+                <p><strong>Drought Stress Applied:</strong> {format_number(row.get('drought_drawdown_m'), 'm')}</p>
+                <p><strong>Well Yield:</strong> {format_number(row.get('YIELD'), ' L/min')}</p>
+            </div>
+        </div>
+        <p><em>Note: Water levels are measured as depth below ground surface. Larger numbers mean deeper water.</em></p>
+    </div>
+    """
+
+def generate_well_report_from_template(row, template_str):
+    """Generate a well report using the template"""
+    
+    # Clean well_id
+    well_id = str(row.get("WELL_ID", "Unknown")).replace('<a href="well_reports/well_', '').replace('.html" target="_blank">', '').replace(' 📊</a>', '')
+    
+    # Prepare all template variables
+    template_data = {
+        'well_id': well_id,
+        'timestamp': datetime.now().strftime('%B %d, %Y at %I:%M %p'),
+        'risk_level': safe_get(row, 'drying_risk'),
+        'risk_color': get_risk_color(row.get('drying_risk')),
+        'risk_explanation': get_risk_explanation(row.get('drying_risk')),
+        'risk_recommendations': get_risk_recommendations(row.get('drying_risk')),
+        'location': safe_get(row, 'location_display', 'Location not specified'),
+        'aquifer_explanation': get_aquifer_explanation(safe_get(row, 'aquifer_type', 'Unknown')),
+        'yield_explanation': get_yield_explanation(safe_get(row, 'YIELD')),
+        'drought_explanation': get_drought_explanation(safe_get(row, 'drought_drawdown_m')),
+        'buffer_display': format_number(row.get('buffer_m'), ' meters'),
+        'technical_summary': get_technical_summary(row)
+    }
+    
+    # Use Template for safe substitution
+    template = Template(template_str)
+    return template.safe_substitute(template_data)
+
+# ---------------------------
+# GENERATE REPORTS USING TEMPLATE
+# ---------------------------
 
 # Create directory for reports
 report_dir = pathlib.Path("well_reports")
 report_dir.mkdir(exist_ok=True)
 
-# Generate enhanced reports for all wells
-print("\n=== GENERATING ENHANCED WELL REPORTS ===")
+# Generate reports for all wells using the template
+print("\n=== GENERATING WELL REPORTS FROM TEMPLATE ===")
 report_count = 0
 for _, row in results.iterrows():
     try:
-        generate_detailed_well_report(row)
+        well_id = str(row.get("WELL_ID", "Unknown")).replace('<a href="well_reports/well_', '').replace('.html" target="_blank">', '').replace(' 📊</a>', '')
+        fname = report_dir / f"well_{well_id}.html"
+        
+        # Generate report from template
+        report_html = generate_well_report_from_template(row, WELL_REPORT_TEMPLATE)
+        
+        # Write to file
+        with open(fname, "w", encoding="utf-8") as f:
+            f.write(report_html)
+        
         report_count += 1
     except Exception as e:
         well_id = str(row.get("WELL_ID", "Unknown"))
         print(f"Warning: Could not generate report for well {well_id}: {e}")
 
-print(f"Generated {report_count} detailed well reports in {report_dir}/")
+print(f"Generated {report_count} well reports from template in {report_dir}/")
 
 # ---------------------------
 # 10. Prepare map data for wells with valid coordinates
@@ -1591,20 +1617,16 @@ table.dataTable td .well-link:hover {{
 
 #mapModal .modal-body {{ 
     padding: 0; 
-    height: calc(100% - 60px);
+    height: calc(100% - 56px); /* Subtract header height */
     position: relative;
 }}
 
 #wellMap {{ 
     height: 100% !important; 
     width: 100% !important;
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 1;
+    min-height: 500px;
 }}
 
-/* Map Controls - Higher z-index to float above map */
 .map-controls {{ 
     position: absolute; 
     top: 10px; 
@@ -1613,16 +1635,9 @@ table.dataTable td .well-link:hover {{
     background: white; 
     padding: 10px; 
     border-radius: 5px; 
-    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
 }}
-.map-controls label {{ 
-    margin-right: 10px; 
-    margin-bottom: 0;
-    font-size: 0.9rem; 
-    cursor: pointer;
-}}
-
-/* Map Legend - Higher z-index to float above map */
+.map-controls label {{ margin-right: 10px; font-size: 0.9rem; }}
 .map-legend {{ 
     position: absolute; 
     bottom: 20px; 
@@ -1631,24 +1646,11 @@ table.dataTable td .well-link:hover {{
     background: white; 
     padding: 10px; 
     border-radius: 5px; 
-    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    font-size: 0.85rem;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+    font-size: 0.8rem;
 }}
-.legend-item {{ 
-    display: flex; 
-    align-items: center; 
-    margin-bottom: 5px; 
-}}
-.legend-item:last-child {{
-    margin-bottom: 0;
-}}
-.legend-color {{ 
-    width: 14px; 
-    height: 14px; 
-    border-radius: 50%; 
-    margin-right: 8px; 
-    border: 1px solid rgba(0,0,0,0.2);
-}}
+.legend-item {{ display: flex; align-items: center; margin-bottom: 3px; }}
+.legend-color {{ width: 12px; height: 12px; border-radius: 50%; margin-right: 5px; }}
 
 #help-window .card-body {{ font-size: 0.9rem; }}
 #help-window .card-body ul {{ padding-left: 20px; }}
@@ -1677,9 +1679,7 @@ table.dataTable td .well-link:hover {{
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-        crossorigin=""></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 </head><body>
 <div class="container-fluid py-4">
@@ -1807,47 +1807,33 @@ html_parts.append("</div>") # end tab-content
 # Map Modal
 html_parts.append(f"""
 <!-- Map Modal -->
-<div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-xl" style="max-width: 95vw; height: 90vh; margin: 1.75rem auto;">
-    <div class="modal-content" style="height: 100%;">
+<div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel">
+  <div class="modal-dialog modal-fullscreen-lg-down">
+    <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="mapModalLabel">Interactive Well Risk Map - Multi-Station Analysis</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body p-0" style="height: calc(100% - 60px); position: relative;">
-        <div id="wellMap" style="height: 100%; width: 100%;"></div>
-      </div>
-      <div class="map-controls" style="position: fixed; top: 80px; right: 30px; z-index: 2000; background: white; padding: 12px; border-radius: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
-        <label style="margin-right: 15px; margin-bottom: 0; cursor: pointer;"><input type="checkbox" id="clusterToggle" checked> Cluster markers</label>
-        <label style="margin-bottom: 0; cursor: pointer;"><input type="checkbox" id="criticalOnly"> Critical/High risk only</label>
-      </div>
-      <div class="map-legend" style="position: fixed; bottom: 40px; right: 30px; z-index: 2000; background: white; padding: 12px; border-radius: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); font-size: 0.85rem;">
-        <strong>Risk Levels:</strong><br>
-        <div style="display: flex; align-items: center; margin-top: 8px; margin-bottom: 4px;">
-          <div style="width: 14px; height: 14px; border-radius: 50%; background-color: red; margin-right: 8px; border: 1px solid #ccc;"></div>
-          <span>Critical</span>
+      <div class="modal-body position-relative">
+        <div class="map-controls">
+          <label><input type="checkbox" id="clusterToggle" checked> Cluster markers</label>
+          <label><input type="checkbox" id="criticalOnly"> Critical/High risk only</label>
         </div>
-        <div style="display: flex; align-items: center; margin-bottom: 4px;">
-          <div style="width: 14px; height: 14px; border-radius: 50%; background-color: orange; margin-right: 8px; border: 1px solid #ccc;"></div>
-          <span>High Risk</span>
-        </div>
-        <div style="display: flex; align-items: center; margin-bottom: 4px;">
-          <div style="width: 14px; height: 14px; border-radius: 50%; background-color: yellow; margin-right: 8px; border: 1px solid #ccc;"></div>
-          <span>Moderate Risk</span>
-        </div>
-        <div style="display: flex; align-items: center; margin-bottom: 4px;">
-          <div style="width: 14px; height: 14px; border-radius: 50%; background-color: green; margin-right: 8px; border: 1px solid #ccc;"></div>
-          <span>Low Risk</span>
-        </div>
-        <div style="display: flex; align-items: center;">
-          <div style="width: 14px; height: 14px; border-radius: 50%; background-color: gray; margin-right: 8px; border: 1px solid #ccc;"></div>
-          <span>No Data</span>
+        <div id="wellMap"></div>
+        <div class="map-legend">
+          <strong>Risk Levels (Post-Drought Stress):</strong><br>
+          <div class="legend-item"><div class="legend-color" style="background-color: red;"></div>Critical</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: orange;"></div>High Risk</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: yellow;"></div>Moderate Risk</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: green;"></div>Low Risk</div>
+          <div class="legend-item"><div class="legend-color" style="background-color: gray;"></div>No Data</div>
         </div>
       </div>
     </div>
   </div>
 </div>
 """)
+
 html_parts.append("</div>") # end container
 
 # Inject column definitions and define the data file paths
