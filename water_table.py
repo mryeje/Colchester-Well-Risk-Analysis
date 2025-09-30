@@ -1587,55 +1587,32 @@ table.dataTable td .well-link:hover {{
 
 /* Map Modal Styles - FIXED */
 #mapModal .modal-dialog {{ 
-    max-width: 95vw; 
-    height: 90vh;
+    max-width: 95vw;
     margin: 1.75rem auto;
 }}
 
 #mapModal .modal-content {{ 
-    height: 100%; 
+    height: 85vh;
 }}
 
 #mapModal .modal-body {{ 
     padding: 0; 
-    height: calc(100% - 56px); /* Subtract header height */
+    height: calc(100% - 60px);
     position: relative;
 }}
 
 #wellMap {{ 
     height: 100% !important; 
     width: 100% !important;
-    min-height: 500px;
+    min-height: 400px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
 }}
 
-.map-controls {{ 
-    position: absolute; 
-    top: 10px; 
-    right: 10px; 
-    z-index: 1000; 
-    background: white; 
-    padding: 10px; 
-    border-radius: 5px; 
-    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
-}}
-.map-controls label {{ margin-right: 10px; font-size: 0.9rem; }}
-.map-legend {{ 
-    position: absolute; 
-    bottom: 20px; 
-    right: 10px; 
-    z-index: 1000; 
-    background: white; 
-    padding: 10px; 
-    border-radius: 5px; 
-    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
-    font-size: 0.8rem;
-}}
-.legend-item {{ display: flex; align-items: center; margin-bottom: 3px; }}
-.legend-color {{ width: 12px; height: 12px; border-radius: 50%; margin-right: 5px; }}
-
-#help-window .card-body {{ font-size: 0.9rem; }}
-#help-window .card-body ul {{ padding-left: 20px; }}
-
+/* Mobile optimizations */
 @media (max-width: 768px) {{
     .map-controls {{ 
         position: relative; 
@@ -1648,6 +1625,62 @@ table.dataTable td .well-link:hover {{
     #wellMap {{ 
         height: 70vh !important;
         min-height: 400px;
+    }}
+    
+    /* Make DataTables search larger and more centered on mobile */
+    .dataTables_wrapper .dataTables_filter {{
+        text-align: center !important;
+        float: none !important;
+        margin: 15px 0 !important;
+    }}
+    
+    .dataTables_wrapper .dataTables_filter input {{
+        width: 100% !important;
+        max-width: 400px !important;
+        margin: 10px auto !important;
+        padding: 12px 15px !important;
+        font-size: 16px !important;
+        border: 2px solid #0b4d78 !important;
+        border-radius: 8px !important;
+        display: block !important;
+    }}
+    
+    .dataTables_wrapper .dataTables_filter label {{
+        display: block !important;
+        width: 100% !important;
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        margin-bottom: 5px !important;
+    }}
+    
+    /* Center and stack DataTables controls on mobile */
+    .dataTables_wrapper .dataTables_length {{
+        text-align: center !important;
+        float: none !important;
+        margin: 10px 0 !important;
+    }}
+    
+    .dataTables_wrapper .dataTables_info {{
+        text-align: center !important;
+        float: none !important;
+        padding-top: 10px !important;
+    }}
+    
+    .dataTables_wrapper .dataTables_paginate {{
+        text-align: center !important;
+        float: none !important;
+        margin-top: 10px !important;
+    }}
+    
+    /* Make buttons stack nicely on mobile */
+    .dataTables_wrapper .dt-buttons {{
+        text-align: center !important;
+        margin: 10px 0 !important;
+    }}
+    
+    .dataTables_wrapper .dt-buttons .btn {{
+        margin: 3px !important;
+        font-size: 14px !important;
     }}
 }}
 </style>
@@ -1786,28 +1819,49 @@ html_parts.append("</div>")
 html_parts.append("</div>") # end tab-content
 
 # Map Modal
+# Map Modal
+# Map Modal
 html_parts.append(f"""
 <!-- Map Modal -->
-<div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel">
-  <div class="modal-dialog modal-fullscreen-lg-down">
-    <div class="modal-content">
+<div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel" aria-hidden="true">
+  <div class="modal-dialog" style="max-width: 90vw; height: 80vh; margin: 2rem auto;">
+    <div class="modal-content" style="height: 100%;">
       <div class="modal-header">
         <h5 class="modal-title" id="mapModalLabel">Interactive Well Risk Map - Multi-Station Analysis</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body position-relative">
-        <div class="map-controls">
-          <label><input type="checkbox" id="clusterToggle" checked> Cluster markers</label>
-          <label><input type="checkbox" id="criticalOnly"> Critical/High risk only</label>
+      <div class="modal-body" style="padding: 0; height: calc(100% - 60px); position: relative;">
+        <div class="map-controls" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+          <label style="margin-right: 10px; font-size: 0.9rem;">
+            <input type="checkbox" id="clusterToggle" checked> Cluster markers
+          </label>
+          <label style="font-size: 0.9rem;">
+            <input type="checkbox" id="criticalOnly"> Critical/High risk only
+          </label>
         </div>
-        <div id="wellMap"></div>
-        <div class="map-legend">
-          <strong>Risk Levels (Post-Drought Stress):</strong><br>
-          <div class="legend-item"><div class="legend-color" style="background-color: red;"></div>Critical</div>
-          <div class="legend-item"><div class="legend-color" style="background-color: orange;"></div>High Risk</div>
-          <div class="legend-item"><div class="legend-color" style="background-color: yellow;"></div>Moderate Risk</div>
-          <div class="legend-item"><div class="legend-color" style="background-color: green;"></div>Low Risk</div>
-          <div class="legend-item"><div class="legend-color" style="background-color: gray;"></div>No Data</div>
+        <div id="wellMap" style="width: 100%; height: 100%; background: #e0e0e0;"></div>
+        <div class="map-legend" style="position: absolute; bottom: 20px; right: 10px; z-index: 1000; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); font-size: 0.85rem;">
+          <strong>Risk Levels:</strong><br>
+          <div style="display: flex; align-items: center; margin: 3px 0;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: red; margin-right: 5px;"></div>
+            Critical
+          </div>
+          <div style="display: flex; align-items: center; margin: 3px 0;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: orange; margin-right: 5px;"></div>
+            High Risk
+          </div>
+          <div style="display: flex; align-items: center; margin: 3px 0;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: yellow; margin-right: 5px;"></div>
+            Moderate Risk
+          </div>
+          <div style="display: flex; align-items: center; margin: 3px 0;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: green; margin-right: 5px;"></div>
+            Low Risk
+          </div>
+          <div style="display: flex; align-items: center; margin: 3px 0;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background-color: gray; margin-right: 5px;"></div>
+            No Data
+          </div>
         </div>
       </div>
     </div>
@@ -1912,26 +1966,27 @@ $(document).ready(function() {
 });
 
 $('#mapModal').on('shown.bs.modal', function () {
-    console.log('Map modal opened');
+    console.log('=== MAP MODAL OPENED ===');
+    console.log('Map object exists:', !!map);
+    console.log('Map data loaded:', allMapData.length);
+    
+    const mapDiv = document.getElementById('wellMap');
+    console.log('Map div found:', !!mapDiv);
+    if (mapDiv) {
+        console.log('Map div dimensions:', mapDiv.offsetWidth, 'x', mapDiv.offsetHeight);
+    }
     
     if (!map) {
-        console.log('Initializing map for first time...');
         setTimeout(() => {
             try {
-                if (allMapData.length === 0) {
-                    $('#wellMap').html('<div class="alert alert-warning m-3">Map data is still loading. Please close and reopen the map modal.</div>');
-                    return;
-                }
                 initializeMap();
-                console.log('Map initialized successfully');
             } catch (error) {
-                console.error('Error initializing map:', error);
-                $('#wellMap').html('<div class="alert alert-danger m-3">Error loading map: ' + error.message + '</div>');
+                console.error('Error:', error);
+                alert('Map error: ' + error.message);
             }
-        }, 250);
+        }, 500);
     } else {
-        console.log('Map already exists, refreshing...');
-        setTimeout(() => map.invalidateSize(), 250);
+        setTimeout(() => map.invalidateSize(), 500);
     }
 });
 
