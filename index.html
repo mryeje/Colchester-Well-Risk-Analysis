@@ -162,11 +162,7 @@ table.dataTable td .well-link:hover {{
 <div class="container-fluid py-4">
 
 <h1 class='mb-3'>Colchester County Well Drying Risk Dashboard</h1>
-<<<<<<< HEAD
-<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-30 08:50 | Wells mapped: 5000</p>
-=======
-<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-30 10:28 | Wells mapped: 5000</p>
->>>>>>> bbdce5adc2ff4201ae2ca4795ebd40a33d777b3a
+<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-30 17:44 | Wells mapped: 5000</p>
 
 <div class="drought-status drought-severe">
     <strong>Regional Drought Status:</strong> 🚨 SEVERE DROUGHT CONDITIONS - 67%+ of monitoring stations show critical low flows
@@ -181,6 +177,14 @@ table.dataTable td .well-link:hover {{
     🗺️ View Interactive Map
   </button>
 </p>
+
+<p>
+  
+  <button class="btn btn-outline-secondary btn-sm ms-2" type="button" id="unitToggle" onclick="toggleUnits()">
+    Switch to Imperial
+  </button>
+</p>
+
 <div class="collapse" id="help-window">
   <div class="card card-body bg-light mb-4">
     <h4>Understanding the Multi-Station Analysis</h4>
@@ -219,9 +223,9 @@ table.dataTable td .well-link:hover {{
 
 <div class="row">
   <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">9013</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">1454</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">24</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">36.32</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">2422</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">148</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">-5.28</div></div></div>
 </div>
 
 
@@ -255,20 +259,20 @@ table.dataTable td .well-link:hover {{
       <td>5445</td>
     </tr>
     <tr>
-      <td>Low risk - &gt;5m buffer</td>
-      <td>2051</td>
+      <td>CRITICAL - Well may be dry</td>
+      <td>2422</td>
     </tr>
     <tr>
-      <td>CRITICAL - Well may be dry</td>
-      <td>1454</td>
+      <td>Low risk - &gt;5m buffer</td>
+      <td>844</td>
     </tr>
     <tr>
       <td>Moderate risk - 2-5m buffer</td>
-      <td>39</td>
+      <td>154</td>
     </tr>
     <tr>
       <td>High risk - &lt;2m buffer</td>
-      <td>24</td>
+      <td>148</td>
     </tr>
   </tbody>
 </table>
@@ -296,18 +300,18 @@ table.dataTable td .well-link:hover {{
   <tbody>
     <tr>
       <th>Bedrock</th>
-      <td>991</td>
-      <td>9</td>
-      <td>1599</td>
-      <td>18</td>
+      <td>1716</td>
+      <td>120</td>
+      <td>660</td>
+      <td>121</td>
       <td>4201</td>
     </tr>
     <tr>
       <th>Surficial</th>
-      <td>459</td>
-      <td>14</td>
-      <td>437</td>
-      <td>21</td>
+      <td>693</td>
+      <td>28</td>
+      <td>177</td>
+      <td>33</td>
       <td>1158</td>
     </tr>
   </tbody>
@@ -363,10 +367,16 @@ table.dataTable td .well-link:hover {{
 
 </div>
 <script> 
-const dtColumns = [{"data": "WELL_ID", "title": "WELL_ID"}, {"data": "location_display", "title": "location_display"}, {"data": "Map Link", "title": "Map Link"}, {"data": "DEPTH", "title": "DEPTH"}, {"data": "STATIC_WATER_LEVEL", "title": "STATIC_WATER_LEVEL"}, {"data": "STATIC_WATER_LEVEL_ORIGINAL", "title": "STATIC_WATER_LEVEL_ORIGINAL"}, {"data": "current_water_level_m_observed", "title": "current_water_level_m_observed"}, {"data": "drought_drawdown_m", "title": "drought_drawdown_m"}, {"data": "stressed_water_level_m", "title": "stressed_water_level_m"}, {"data": "pump_depth_m", "title": "pump_depth_m"}, {"data": "buffer_m", "title": "buffer_m"}, {"data": "drying_risk", "title": "drying_risk"}, {"data": "YIELD", "title": "YIELD"}, {"data": "yield_category", "title": "yield_category"}, {"data": "aquifer_type", "title": "aquifer_type"}]; 
+const dtColumns = [{"data": "WELL_ID", "title": "Well ID"}, {"data": "location_display", "title": "Location"}, {"data": "Map Link", "title": "Map"}, {"data": "DEPTH", "title": "Well Depth"}, {"data": "DEPTH_M", "title": "Well Depth"}, {"data": "STATIC_WATER_LEVEL", "title": "Static Water Level"}, {"data": "current_water_level_m_observed", "title": "Current Water Level"}, {"data": "drought_drawdown_m", "title": "Drought Stress"}, {"data": "stressed_water_level_m", "title": "Stressed Water Level"}, {"data": "pump_depth_m", "title": "Pump Depth"}, {"data": "buffer_m", "title": "Safety Buffer"}, {"data": "drying_risk", "title": "Risk Level"}, {"data": "YIELD", "title": "Yield"}, {"data": "YIELD_LMIN", "title": "Yield"}, {"data": "yield_category", "title": "Yield Category"}, {"data": "aquifer_type", "title": "Aquifer Type"}]; 
 const dataJsonFile = 'wells_data.json';
 const mapDataFile = 'wells_map_data.json';
-const mapCenter = [45.39068871214554, -63.3819811722158];
+const mapCenter = [45.39167505175504, -63.37505302973441];
+</script>
+<script> 
+const dtColumns = [{"data": "WELL_ID", "title": "Well ID"}, {"data": "location_display", "title": "Location"}, {"data": "Map Link", "title": "Map"}, {"data": "DEPTH", "title": "Well Depth"}, {"data": "DEPTH_M", "title": "Well Depth"}, {"data": "STATIC_WATER_LEVEL", "title": "Static Water Level"}, {"data": "current_water_level_m_observed", "title": "Current Water Level"}, {"data": "drought_drawdown_m", "title": "Drought Stress"}, {"data": "stressed_water_level_m", "title": "Stressed Water Level"}, {"data": "pump_depth_m", "title": "Pump Depth"}, {"data": "buffer_m", "title": "Safety Buffer"}, {"data": "drying_risk", "title": "Risk Level"}, {"data": "YIELD", "title": "Yield"}, {"data": "YIELD_LMIN", "title": "Yield"}, {"data": "yield_category", "title": "Yield Category"}, {"data": "aquifer_type", "title": "Aquifer Type"}]; 
+const dataJsonFile = 'wells_data.json';
+const mapDataFile = 'wells_map_data.json';
+const mapCenter = [45.39167505175504, -63.37505302973441];
 </script>
 
 <script>
@@ -376,7 +386,6 @@ let clusterGroup = null;
 let allMapData = [];
 let currentTable = null;
 
-// Add the missing findColumnIndex function
 function findColumnIndex(columnName) {
     for (let i = 0; i < dtColumns.length; i++) {
         if (dtColumns[i].data === columnName) {
@@ -387,7 +396,6 @@ function findColumnIndex(columnName) {
 }
 
 $(document).ready(function() {
-  // Load table data
   fetch(dataJsonFile)
     .then(response => {
         if (!response.ok) {
@@ -427,7 +435,6 @@ $(document).ready(function() {
         $('#all_wells_table').html("<p style='color:red;'>Error: Could not load well data.</p>");
     });
 
-  // Load map data
   fetch(mapDataFile)
     .then(response => {
         if (!response.ok) {
@@ -443,7 +450,6 @@ $(document).ready(function() {
         console.error("Error loading map data:", error);
     });
 
-  // Initialize smaller tables
   $('#risk_table, #aq_table').DataTable({
     pageLength: 20,
     dom: 'Bfrtip',
@@ -486,12 +492,10 @@ function initializeMap() {
     
     console.log('Creating map...');
     
-    // Create map
     map = L.map('wellMap').setView(mapCenter, 9);
     
     console.log('Adding tile layer...');
     
-    // Add tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
@@ -499,7 +503,6 @@ function initializeMap() {
     
     console.log('Creating marker layers...');
     
-    // Create marker layers
     clusterGroup = L.markerClusterGroup({
         maxClusterRadius: 50,
         spiderfyOnMaxZoom: true,
@@ -512,7 +515,6 @@ function initializeMap() {
     console.log('Loading markers...');
     loadMapMarkers();
     
-    // Add event listeners
     const clusterToggle = document.getElementById('clusterToggle');
     const criticalOnlyToggle = document.getElementById('criticalOnly');
     
@@ -523,7 +525,6 @@ function initializeMap() {
         criticalOnlyToggle.addEventListener('change', filterMarkers);
     }
     
-    // Force map resize
     setTimeout(() => map.invalidateSize(), 100);
 }
 
@@ -540,7 +541,6 @@ function loadMapMarkers(filterCritical = false) {
         return;
     }
     
-    // Clear existing markers
     if (clusterGroup) clusterGroup.clearLayers();
     if (markersLayer) markersLayer.clearLayers();
     
@@ -578,7 +578,6 @@ function loadMapMarkers(filterCritical = false) {
     
     console.log(`Added ${markersAdded} markers to map`);
     
-    // Add appropriate layer
     const clusterToggle = document.getElementById('clusterToggle');
     const clusterEnabled = clusterToggle ? clusterToggle.checked : true;
     
@@ -628,6 +627,91 @@ function highlightWellOnMap(wellId) {
             layer.openPopup();
         }
     });
+}
+
+let currentUnits = 'metric';
+let originalMetricData = null;
+
+function toggleUnits() {
+    if (!currentTable) {
+        console.error('Table not initialized yet');
+        return;
+    }
+    
+    const button = document.getElementById('unitToggle');
+    
+    if (!originalMetricData) {
+        const allData = currentTable.rows().data().toArray();
+        originalMetricData = allData.map(row => JSON.parse(JSON.stringify(row)));
+    }
+    
+    if (currentUnits === 'metric') {
+        currentUnits = 'imperial';
+        button.textContent = 'Switch to Metric';
+        
+        currentTable.rows().every(function() {
+            const row = this.data();
+            
+            if (row.DEPTH_M && !isNaN(parseFloat(row.DEPTH_M))) {
+                row.DEPTH_M = (parseFloat(row.DEPTH_M) * 3.28084).toFixed(1);
+            }
+            if (row.pump_depth_m && !isNaN(parseFloat(row.pump_depth_m))) {
+                row.pump_depth_m = (parseFloat(row.pump_depth_m) * 3.28084).toFixed(1);
+            }
+            if (row.buffer_m && !isNaN(parseFloat(row.buffer_m))) {
+                row.buffer_m = (parseFloat(row.buffer_m) * 3.28084).toFixed(1);
+            }
+            if (row.current_water_level_m_observed && !isNaN(parseFloat(row.current_water_level_m_observed))) {
+                row.current_water_level_m_observed = (parseFloat(row.current_water_level_m_observed) * 3.28084).toFixed(1);
+            }
+            if (row.drought_drawdown_m && !isNaN(parseFloat(row.drought_drawdown_m))) {
+                row.drought_drawdown_m = (parseFloat(row.drought_drawdown_m) * 3.28084).toFixed(1);
+            }
+            if (row.stressed_water_level_m && !isNaN(parseFloat(row.stressed_water_level_m))) {
+                row.stressed_water_level_m = (parseFloat(row.stressed_water_level_m) * 3.28084).toFixed(1);
+            }
+            if (row.YIELD_LMIN && !isNaN(parseFloat(row.YIELD_LMIN))) {
+                row.YIELD_LMIN = (parseFloat(row.YIELD_LMIN) / 3.78541).toFixed(1);
+            }
+            
+            this.data(row);
+        });
+        
+        updateHeader('DEPTH_M', 'Well Depth (ft)');
+        updateHeader('pump_depth_m', 'Pump Depth (ft)');
+        updateHeader('buffer_m', 'Safety Buffer (ft)');
+        updateHeader('current_water_level_m_observed', 'Current Water Level (ft)');
+        updateHeader('drought_drawdown_m', 'Drought Stress (ft)');
+        updateHeader('stressed_water_level_m', 'Stressed Water Level (ft)');
+        updateHeader('YIELD_LMIN', 'Yield (GPM)');
+        
+    } else {
+        currentUnits = 'metric';
+        button.textContent = 'Switch to Imperial';
+        
+        currentTable.rows().every(function(idx) {
+            if (originalMetricData[idx]) {
+                this.data(originalMetricData[idx]);
+            }
+        });
+        
+        updateHeader('DEPTH_M', 'Well Depth (m)');
+        updateHeader('pump_depth_m', 'Pump Depth (m)');
+        updateHeader('buffer_m', 'Safety Buffer (m)');
+        updateHeader('current_water_level_m_observed', 'Current Water Level (m)');
+        updateHeader('drought_drawdown_m', 'Drought Stress (m)');
+        updateHeader('stressed_water_level_m', 'Stressed Water Level (m)');
+        updateHeader('YIELD_LMIN', 'Yield (L/min)');
+    }
+    
+    currentTable.draw(false);
+}
+
+function updateHeader(columnData, newTitle) {
+    const colIdx = currentTable.column(columnData + ':name').index();
+    if (colIdx >= 0) {
+        $(currentTable.column(colIdx).header()).text(newTitle);
+    }
 }
 </script>
 

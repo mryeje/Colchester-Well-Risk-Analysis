@@ -41,17 +41,17 @@ DROUGHT_DRAWDOWN_M = 2.0
 COLCHESTER_STATIONS = {
     "01EO001": {  # Salmon River near Truro
         "name": "Salmon River near Truro", 
-        "critical_threshold": 1.0,  # mÂ³/s
+        "critical_threshold": 1.0,  # m³/s
         "region": "Central Colchester"
     },
     "01EB001": {  # Economy River near Economy  
         "name": "Economy River near Economy",
-        "critical_threshold": 0.5,  # mÂ³/s (smaller river)
+        "critical_threshold": 0.5,  # m³/s (smaller river)
         "region": "North Colchester"
     },
     "01ED002": {  # Great Village River at Great Village
         "name": "Great Village River at Great Village", 
-        "critical_threshold": 0.8,  # mÂ³/s
+        "critical_threshold": 0.8,  # m³/s
         "region": "North-Central Colchester"
     }
 }
@@ -88,17 +88,17 @@ wells.columns = [str(c).upper().strip() for c in wells.columns]
 col_map = {
     # depth
     "TOTALORFINISHEDDEPTH": "DEPTH",
-    "DEPTH": "DEPTH",
+    
     "WYDEPTHENDOFTEST": "DEPTH",
     # static water level
     "WYSTATICLEVEL": "STATIC_WATER_LEVEL",
-    "STATIC_WATER_LEVEL": "STATIC_WATER_LEVEL",
+    
     "WYDEPTHTOWATERBEFOREPUMP": "STATIC_WATER_LEVEL",
     "WYDEPTHTOWATERAFTERPUMP": "STATIC_WATER_LEVEL",
     # yield
     "WYESTIMATEDYIELD": "YIELD",
     "WYRATE": "YIELD",
-    "YIELD": "YIELD",
+    
     # county
     "COUNTYL": "COUNTY",
     "COUNTY": "COUNTY",
@@ -123,11 +123,28 @@ col_map = {
     "COMMUNITY": "MUNICIPALITY",
 }
 
+# --- INSERT THIS BLOCK BEFORE COLUMN RENAMING ---
+# 1. Identify which reliable, specific columns are present
+available_specific_cols = {
+    "WYSTATICLEVEL": "STATIC_WATER_LEVEL",
+    "WYRATE": "YIELD"
+}
+
+# 2. If the reliable source exists, drop the generic, less reliable target column if it also exists.
+# This ensures the rename will succeed and use the specific source data.
+for specific_col, standard_col in available_specific_cols.items():
+    if specific_col in wells.columns and standard_col in wells.columns:
+        print(f"Conflicting generic column '{standard_col}' found. Dropping to ensure '{specific_col}' is used.")
+        # Drop the incorrect generic column. The correct specific column will be renamed next.
+        wells = wells.drop(columns=[standard_col])
+
+# --- YOUR ORIGINAL RENAMING BLOCK FOLLOWS HERE ---
 # Apply mapping for any matching columns
 available_cols = set(wells.columns)
 rename_map = {old: new for old, new in col_map.items() if old in available_cols and new not in wells.columns}
 if rename_map:
     wells = wells.rename(columns=rename_map)
+    # ... (rest of your original code)
     print(f"Normalized columns: {rename_map}")
 
 # Check for duplicate column names after renaming
@@ -142,8 +159,28 @@ if wells.columns.duplicated().any():
         # drop the extra duplicate columns (keep one)
         wells = wells.loc[:, ~wells.columns.duplicated()]
 
-# COORDINATE DIAGNOSTIC - Add this section here
-print("\n=== COORDINATE DIAGNOSTIC ===")
+
+# --- CORRECTED UNIT CONVERSION PATCH ---
+if 'WYSTATICLEVEL' in wells.columns:
+    # Force imperial SWL to the reliable source (WYSTATICLEVEL is in FEET)
+    wells['STATIC_WATER_LEVEL'] = pd.to_numeric(wells['WYSTATICLEVEL'], errors='coerce')
+    wells['STATIC_WATER_LEVEL_ORIGINAL'] = pd.to_numeric(wells['WYSTATICLEVEL'], errors='coerce')
+    
+    # Convert feet to meters for the metric column (1 foot = 0.3048 meters)
+    wells['current_water_level_m_observed'] = wells['STATIC_WATER_LEVEL'] * 0.3048
+    
+    print("✅ Corrected SWL: STATIC_WATER_LEVEL (ft) from WYSTATICLEVEL, converted to current_water_level_m_observed (m)")
+
+if 'WYRATE' in wells.columns:
+    # WYRATE is in GPM, convert to L/min (1 GPM = 3.78541 L/min)
+    wells['YIELD'] = pd.to_numeric(wells['WYRATE'], errors='coerce')
+    wells['YIELD_LMIN'] = wells['YIELD'] * 3.78541
+    print("✅ Converted YIELD from GPM to L/min")
+
+
+# PATCH 2: STATIC WATER LEVEL VALIDATION AND CORRECTION
+# ---------------------------
+print("\n=== STATIC WATER LEVEL VALIDATION ===")
 coord_columns = [col for col in wells.columns if any(term in col.upper() for term in ['X', 'Y', 'EAST', 'NORTH', 'LAT', 'LON'])]
 print(f"Coordinate-related columns found: {coord_columns}")
 
@@ -315,6 +352,8 @@ print("\n=== STATIC WATER LEVEL VALIDATION ===")
 wells["DEPTH"] = pd.to_numeric(wells["DEPTH"], errors="coerce")
 wells["STATIC_WATER_LEVEL"] = pd.to_numeric(wells["STATIC_WATER_LEVEL"], errors="coerce")
 
+
+
 print(f"Static water level stats:")
 swl_stats = wells["STATIC_WATER_LEVEL"].describe()
 print(swl_stats)
@@ -372,8 +411,57 @@ if impossible_mask.any():
     print(f"Fixed {impossible_count} wells where static level > total depth")
 
 print(f"Corrected static water level stats:")
-print(wells["STATIC_WATER_LEVEL"].describe())
 
+
+# =============================================================================
+# ADD UNIT CONVERSIONS HERE - INSERT THIS BLOCK
+# =============================================================================
+
+print("\n=== APPLYING UNIT CONVERSIONS ===")
+
+# Convert all depth measurements from feet to meters
+# DEPTH is in feet, convert to meters
+if 'DEPTH' in wells.columns:
+    wells['DEPTH_M'] = wells['DEPTH'] * 0.3048
+    print(f"✅ Converted DEPTH from feet to meters")
+
+# Ensure static water level metric conversion is correct
+if 'STATIC_WATER_LEVEL' in wells.columns:
+    if 'current_water_level_m_observed' not in wells.columns:
+        wells['current_water_level_m_observed'] = wells['STATIC_WATER_LEVEL'] * 0.3048
+        print(f"✅ Created metric static water level from feet")
+    else:
+        # Double-check the conversion
+        wells['current_water_level_m_observed'] = wells['STATIC_WATER_LEVEL'] * 0.3048
+        print(f"✅ Verified metric static water level conversion")
+
+# Convert yield from GPM to L/min if we have yield data
+if 'YIELD' in wells.columns:
+    wells['YIELD_LMIN'] = wells['YIELD'] * 3.78541
+    print(f"✅ Converted YIELD from GPM to L/min")
+
+# Update yield categorization to use L/min
+if 'YIELD_LMIN' in wells.columns:
+    wells['yield_category'] = wells['YIELD_LMIN'].apply(
+        lambda x: "Low yield (<10 L/min)" if pd.notna(x) and x < 10
+        else "Adequate yield (≥10 L/min)" if pd.notna(x) and x >= 10
+        else "Unknown yield"
+    )
+    print("✅ Updated yield categories based on L/min values")
+elif 'YIELD' in wells.columns:
+    # Fallback: if no L/min conversion, use GPM with approximate threshold (10 L/min ≈ 2.64 GPM)
+    wells['yield_category'] = wells['YIELD'].apply(
+        lambda x: "Low yield (<2.64 GPM)" if pd.notna(x) and x < 2.64
+        else "Adequate yield (≥2.64 GPM)" if pd.notna(x) and x >= 2.64
+        else "Unknown yield"
+    )
+    print("✅ Updated yield categories based on GPM values")
+
+print("Unit conversions completed successfully")
+
+# =============================================================================
+# END OF UNIT CONVERSION BLOCK
+# =============================================================================
 # AQUIFER CLASSIFICATION DEBUGGING
 print("\n=== AQUIFER CLASSIFICATION DEBUG ===")
 print(f"Looking for shapefile files:")
@@ -441,10 +529,14 @@ except Exception as e:
 # ---------------------------
 # 4. Pump depth estimate & buffer
 # ---------------------------
-def estimate_pump_depth(depth):
+def estimate_pump_depth(depth_ft):
+    """Estimate pump depth in meters from well depth in feet"""
     try:
-        depth = float(depth)
-        return min(depth * 0.8, depth - 2.5)
+        depth_ft = float(depth_ft)
+        # Convert feet to meters first
+        depth_m = depth_ft * 0.3048
+        # Pump is typically at 80% of depth or 2.5m from bottom, whichever is shallower
+        return min(depth_m * 0.8, depth_m - 2.5)
     except Exception:
         return np.nan
 
@@ -652,6 +744,64 @@ if ("X" in wells.columns and "Y" in wells.columns) and pd.notna(wells["X"]).any(
         bedrock_matches = wb["index_right"].notna().sum()
         print(f"DEBUG: Wells matching bedrock polygons: {bedrock_matches}")
         
+        # -----------------------------------------------------------------------------------------
+        # --- Section 6b: Fallback Textual & Numeric Aquifer Classification ---
+        # -----------------------------------------------------------------------------------------
+
+        print("\n--- Applying Fallback Textual & Numeric Aquifer Classification ---")
+
+        # Define keywords indicative of bedrock for case-insensitive searching
+        BEDROCK_KEYWORDS = [
+            'SLATE', 'SHALE', 'GRANITE', 'BEDROCK', 'METAMORPHIC', 'IGNEOUS', 
+            'SEDIMENTARY', 'GNEISS', 'SCHIST', 'QUARTZITE', 'LITHIFIED'
+        ]
+        SEARCH_COLS = ["COMMENTS", "LITHOLOGY"] # Columns to search for keywords
+
+        # 1. Filter for wells that failed spatial classification (Unknown or None)
+        # This FIX ensures we capture both "Unknown" (from init/no-coords) and "None" (from spatial miss)
+        unknown_or_none_mask = wells["aquifer_type"].isin(["Unknown", "None"])
+
+        # --- 2. Check for Textual keyword matches ---
+        text_match_mask = pd.Series(False, index=wells.index)
+        keyword_pattern = '|'.join(BEDROCK_KEYWORDS)
+
+        if any(col in wells.columns for col in SEARCH_COLS):
+            for col in SEARCH_COLS:
+                if col in wells.columns:
+                    # Convert column to string (to safely handle NaN/missing data) and search, case-insensitive
+                    col_match = wells[col].astype(str).str.contains(
+                        keyword_pattern, 
+                        case=False, 
+                        na=False
+                    )
+                    # Combine matches from all search columns
+                    text_match_mask = text_match_mask | col_match
+
+        # --- 3. Check for Numeric DEPTH_TO_BEDROCK (New Definitive Fallback) ---
+        numeric_bedrock_mask = pd.Series(False, index=wells.index)
+        if "DEPTHTOBEDROCK" in wells.columns:
+            # A positive, recorded depth to bedrock is definitive proof of a bedrock well.
+            # We must ensure the column is numeric and check for non-NA and value > 0.
+            wells["DEPTHTOBEDROCK"] = pd.to_numeric(wells["DEPTHTOBEDROCK"], errors='coerce')
+            numeric_bedrock_mask = wells["DEPTHTOBEDROCK"].notna() & (wells["DEPTHTOBEDROCK"] > 0)
+
+
+        # --- 4. Apply the Fallback ---
+        # Wells must be UNCLASSIFIED AND (have a text match OR a numeric depth to bedrock)
+        fallback_condition = unknown_or_none_mask & (text_match_mask | numeric_bedrock_mask)
+        fallback_count = fallback_condition.sum()
+
+        if fallback_count > 0:
+            wells.loc[fallback_condition, "aquifer_type"] = "Bedrock"
+            print(f"Successfully classified {fallback_count} well(s) as 'Bedrock' using fallback logic.")
+        else:
+            print("No additional wells classified using fallback logic.")
+
+        # -----------------------------------------------------------------------------------------
+
+        # -----------------------------------------------------------------------------------------
+        
+        
         wb["aquifer_type"] = np.where(
             wb["index_right"].notna(),
             "Bedrock",
@@ -799,10 +949,11 @@ print(f"\nBuffer statistics (meters after drought stress):")
 print(buffer_stats)
 
 # Export CSV (include useful columns)
+# Export CSV (include useful columns with proper units)
 out_cols = ["WELL_ID", "CIVIC_ADDRESS", "MUNICIPALITY", "location_display", "google_maps_link", 
-            "latitude", "longitude", "DEPTH", "STATIC_WATER_LEVEL", "STATIC_WATER_LEVEL_ORIGINAL",
+            "latitude", "longitude", "DEPTH", "DEPTH_M", "STATIC_WATER_LEVEL",
             "current_water_level_m_observed", "drought_drawdown_m", "stressed_water_level_m",
-            "pump_depth_m", "buffer_m", "drying_risk", "YIELD", "yield_category", "aquifer_type"]
+            "pump_depth_m", "buffer_m", "drying_risk", "YIELD", "YIELD_LMIN", "yield_category", "aquifer_type"]
 # only keep existing
 out_cols = [c for c in out_cols if c in wells.columns]
 results = wells[out_cols].sort_values("buffer_m", ascending=True)
@@ -1469,6 +1620,18 @@ def create_well_report_link(well_id):
 # Prepare the main table for client-side rendering
 all_wells_display = results.copy()
 
+# === CHECK FOR DUPLICATES IN SOURCE DATA ===
+print("Checking for duplicate columns in source data...")
+print(f"Initial columns in results: {list(results.columns)}")
+if results.columns.duplicated().any():
+    print("❌ RESULTS has duplicate columns!")
+    duplicate_cols = results.columns[results.columns.duplicated()].tolist()
+    print(f"Duplicate columns in results: {duplicate_cols}")
+    # Remove duplicates from results
+    results = results.loc[:, ~results.columns.duplicated()]
+    all_wells_display = results.copy()
+    print("✅ Removed duplicate columns from results")
+
 # Apply the new link creation function
 print("Creating well ID links with report icons...")
 if 'WELL_ID' in all_wells_display.columns:
@@ -1487,12 +1650,82 @@ if 'google_maps_link' in all_wells_display.columns:
         c for c in all_wells_display.columns 
         if c not in drop_cols + ['WELL_ID', 'location_display', 'Map Link']
     ]
+    
+    # Remove duplicates from display_cols
+    unique_display_cols = []
+    seen_cols = set()
+    for col in display_cols:
+        if col not in seen_cols:
+            unique_display_cols.append(col)
+            seen_cols.add(col)
+        else:
+            print(f"Removing duplicate column from display: {col}")
+    display_cols = unique_display_cols
+    
     all_wells_display = all_wells_display[display_cols]
 
+# === FINAL DUPLICATE CHECK BEFORE JSON ===
+print("Final check for duplicate columns before JSON conversion...")
+print(f"Columns before JSON: {list(all_wells_display.columns)}")
+
+if all_wells_display.columns.duplicated().any():
+    print("❌ DUPLICATE COLUMNS STILL EXIST! Using emergency cleanup...")
+    # Emergency cleanup - rebuild with unique columns only
+    unique_cols = []
+    seen = set()
+    for col in all_wells_display.columns:
+        if col not in seen:
+            unique_cols.append(col)
+            seen.add(col)
+        else:
+            print(f"Emergency removal of duplicate: {col}")
+    all_wells_display = all_wells_display[unique_cols]
+
+# Ensure all column names are strings
+all_wells_display.columns = [str(col) for col in all_wells_display.columns]
+
+print(f"✅ Final column count: {len(all_wells_display.columns)}")
+print(f"✅ Final columns: {list(all_wells_display.columns)}")
+
+
 # Convert the full dataset to JSON
-all_wells_json = all_wells_display.to_json(orient="records")
+try:
+    all_wells_json = all_wells_display.to_json(orient="records")
+    print("✅ JSON conversion successful")
+except Exception as e:
+    print(f"❌ JSON conversion failed: {e}")
+    # Last resort: create a simple DataFrame with just essential columns
+    essential_cols = ['WELL_ID', 'location_display', 'Map Link', 'DEPTH', 'DEPTH_M', 'STATIC_WATER_LEVEL', 'current_water_level_m_observed', 'YIELD', 'YIELD_LMIN', 'drying_risk', 'yield_category', 'aquifer_type']
+    essential_cols = [col for col in essential_cols if col in all_wells_display.columns]
+    all_wells_display_simple = all_wells_display[essential_cols]
+    all_wells_json = all_wells_display_simple.to_json(orient="records")
+    print("✅ Used fallback JSON conversion with essential columns only")
+
+# Create column definitions with proper units for DataTables
+def format_column_title(col_name):
+    """Add units to column titles for better readability"""
+    unit_map = {
+        'DEPTH': 'Well Depth',
+        'DEPTH_M': 'Well Depth',
+        'STATIC_WATER_LEVEL': 'Static Water Level',
+        'current_water_level_m_observed': 'Current Water Level',
+        'drought_drawdown_m': 'Drought Stress',
+        'stressed_water_level_m': 'Stressed Water Level',
+        'pump_depth_m': 'Pump Depth',
+        'buffer_m': 'Safety Buffer',
+        'YIELD': 'Yield',
+        'YIELD_LMIN': 'Yield',
+        'drying_risk': 'Risk Level',
+        'yield_category': 'Yield Category',
+        'aquifer_type': 'Aquifer Type',
+        'location_display': 'Location',
+        'WELL_ID': 'Well ID',
+        'Map Link': 'Map',
+    }
+    return unit_map.get(col_name, col_name)
+
 # Create the column definitions for DataTables
-datatables_columns = json.dumps([{"data": col, "title": col} for col in all_wells_display.columns])
+datatables_columns = json.dumps([{"data": col, "title": format_column_title(col)} for col in all_wells_display.columns])
 
 # Save the data payload separately to keep the HTML file small
 data_json_file = "wells_data.json"
@@ -1736,6 +1969,14 @@ html_parts.append("""
     🗺️ View Interactive Map
   </button>
 </p>
+
+<p>
+  
+  <button class="btn btn-outline-secondary btn-sm ms-2" type="button" id="unitToggle" onclick="toggleUnits()">
+    Switch to Imperial
+  </button>
+</p>
+
 <div class="collapse" id="help-window">
   <div class="card card-body bg-light mb-4">
     <h4>Understanding the Multi-Station Analysis</h4>
@@ -1880,6 +2121,14 @@ const mapCenter = [{map_center_lat}, {map_center_lng}];
 </script>""")
 
 # DataTables and Map initialization script
+html_parts.append(f"""<script> 
+const dtColumns = {datatables_columns}; 
+const dataJsonFile = '{data_json_file}';
+const mapDataFile = '{map_data_json_file}';
+const mapCenter = [{map_center_lat}, {map_center_lng}];
+</script>""")
+
+# DataTables and Map initialization script
 html_parts.append("""
 <script>
 let map = null;
@@ -1888,7 +2137,6 @@ let clusterGroup = null;
 let allMapData = [];
 let currentTable = null;
 
-// Add the missing findColumnIndex function
 function findColumnIndex(columnName) {
     for (let i = 0; i < dtColumns.length; i++) {
         if (dtColumns[i].data === columnName) {
@@ -1899,7 +2147,6 @@ function findColumnIndex(columnName) {
 }
 
 $(document).ready(function() {
-  // Load table data
   fetch(dataJsonFile)
     .then(response => {
         if (!response.ok) {
@@ -1939,7 +2186,6 @@ $(document).ready(function() {
         $('#all_wells_table').html("<p style='color:red;'>Error: Could not load well data.</p>");
     });
 
-  // Load map data
   fetch(mapDataFile)
     .then(response => {
         if (!response.ok) {
@@ -1955,7 +2201,6 @@ $(document).ready(function() {
         console.error("Error loading map data:", error);
     });
 
-  // Initialize smaller tables
   $('#risk_table, #aq_table').DataTable({
     pageLength: 20,
     dom: 'Bfrtip',
@@ -1998,12 +2243,10 @@ function initializeMap() {
     
     console.log('Creating map...');
     
-    // Create map
     map = L.map('wellMap').setView(mapCenter, 9);
     
     console.log('Adding tile layer...');
     
-    // Add tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
@@ -2011,7 +2254,6 @@ function initializeMap() {
     
     console.log('Creating marker layers...');
     
-    // Create marker layers
     clusterGroup = L.markerClusterGroup({
         maxClusterRadius: 50,
         spiderfyOnMaxZoom: true,
@@ -2024,7 +2266,6 @@ function initializeMap() {
     console.log('Loading markers...');
     loadMapMarkers();
     
-    // Add event listeners
     const clusterToggle = document.getElementById('clusterToggle');
     const criticalOnlyToggle = document.getElementById('criticalOnly');
     
@@ -2035,7 +2276,6 @@ function initializeMap() {
         criticalOnlyToggle.addEventListener('change', filterMarkers);
     }
     
-    // Force map resize
     setTimeout(() => map.invalidateSize(), 100);
 }
 
@@ -2052,7 +2292,6 @@ function loadMapMarkers(filterCritical = false) {
         return;
     }
     
-    // Clear existing markers
     if (clusterGroup) clusterGroup.clearLayers();
     if (markersLayer) markersLayer.clearLayers();
     
@@ -2090,7 +2329,6 @@ function loadMapMarkers(filterCritical = false) {
     
     console.log(`Added ${markersAdded} markers to map`);
     
-    // Add appropriate layer
     const clusterToggle = document.getElementById('clusterToggle');
     const clusterEnabled = clusterToggle ? clusterToggle.checked : true;
     
@@ -2140,6 +2378,91 @@ function highlightWellOnMap(wellId) {
             layer.openPopup();
         }
     });
+}
+
+let currentUnits = 'metric';
+let originalMetricData = null;
+
+function toggleUnits() {
+    if (!currentTable) {
+        console.error('Table not initialized yet');
+        return;
+    }
+    
+    const button = document.getElementById('unitToggle');
+    
+    if (!originalMetricData) {
+        const allData = currentTable.rows().data().toArray();
+        originalMetricData = allData.map(row => JSON.parse(JSON.stringify(row)));
+    }
+    
+    if (currentUnits === 'metric') {
+        currentUnits = 'imperial';
+        button.textContent = 'Switch to Metric';
+        
+        currentTable.rows().every(function() {
+            const row = this.data();
+            
+            if (row.DEPTH_M && !isNaN(parseFloat(row.DEPTH_M))) {
+                row.DEPTH_M = (parseFloat(row.DEPTH_M) * 3.28084).toFixed(1);
+            }
+            if (row.pump_depth_m && !isNaN(parseFloat(row.pump_depth_m))) {
+                row.pump_depth_m = (parseFloat(row.pump_depth_m) * 3.28084).toFixed(1);
+            }
+            if (row.buffer_m && !isNaN(parseFloat(row.buffer_m))) {
+                row.buffer_m = (parseFloat(row.buffer_m) * 3.28084).toFixed(1);
+            }
+            if (row.current_water_level_m_observed && !isNaN(parseFloat(row.current_water_level_m_observed))) {
+                row.current_water_level_m_observed = (parseFloat(row.current_water_level_m_observed) * 3.28084).toFixed(1);
+            }
+            if (row.drought_drawdown_m && !isNaN(parseFloat(row.drought_drawdown_m))) {
+                row.drought_drawdown_m = (parseFloat(row.drought_drawdown_m) * 3.28084).toFixed(1);
+            }
+            if (row.stressed_water_level_m && !isNaN(parseFloat(row.stressed_water_level_m))) {
+                row.stressed_water_level_m = (parseFloat(row.stressed_water_level_m) * 3.28084).toFixed(1);
+            }
+            if (row.YIELD_LMIN && !isNaN(parseFloat(row.YIELD_LMIN))) {
+                row.YIELD_LMIN = (parseFloat(row.YIELD_LMIN) / 3.78541).toFixed(1);
+            }
+            
+            this.data(row);
+        });
+        
+        updateHeader('DEPTH_M', 'Well Depth (ft)');
+        updateHeader('pump_depth_m', 'Pump Depth (ft)');
+        updateHeader('buffer_m', 'Safety Buffer (ft)');
+        updateHeader('current_water_level_m_observed', 'Current Water Level (ft)');
+        updateHeader('drought_drawdown_m', 'Drought Stress (ft)');
+        updateHeader('stressed_water_level_m', 'Stressed Water Level (ft)');
+        updateHeader('YIELD_LMIN', 'Yield (GPM)');
+        
+    } else {
+        currentUnits = 'metric';
+        button.textContent = 'Switch to Imperial';
+        
+        currentTable.rows().every(function(idx) {
+            if (originalMetricData[idx]) {
+                this.data(originalMetricData[idx]);
+            }
+        });
+        
+        updateHeader('DEPTH_M', 'Well Depth (m)');
+        updateHeader('pump_depth_m', 'Pump Depth (m)');
+        updateHeader('buffer_m', 'Safety Buffer (m)');
+        updateHeader('current_water_level_m_observed', 'Current Water Level (m)');
+        updateHeader('drought_drawdown_m', 'Drought Stress (m)');
+        updateHeader('stressed_water_level_m', 'Stressed Water Level (m)');
+        updateHeader('YIELD_LMIN', 'Yield (L/min)');
+    }
+    
+    currentTable.draw(false);
+}
+
+function updateHeader(columnData, newTitle) {
+    const colIdx = currentTable.column(columnData + ':name').index();
+    if (colIdx >= 0) {
+        $(currentTable.column(colIdx).header()).text(newTitle);
+    }
 }
 </script>
 """)

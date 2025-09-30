@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NS Well Log to CSV Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .form-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-section h2 {
+            color: #34495e;
+            margin-top: 0;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 8px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #555;
+            font-size: 14px;
+        }
+        input, select, textarea {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        .output-section {
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        #csvOutput {
+            width: 100%;
+            min-height: 150px;
+            background: #34495e;
+            color: #ecf0f1;
+            border: none;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .button-group {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .generate-btn {
+            background-color: #27ae60;
+            color: white;
+            flex: 1;
+        }
+        .generate-btn:hover {
+            background-color: #229954;
+        }
+        .copy-btn {
+            background-color: #3498db;
+            color: white;
+            flex: 1;
+        }
+        .copy-btn:hover {
+            background-color: #2980b9;
+        }
+        .reset-btn {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .reset-btn:hover {
+            background-color: #c0392b;
+        }
+        .help-text {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 3px;
+        }
+        .status {
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>NS Well Log to CSV Converter (1970s Format)</h1>
+    
+    <div class="form-section">
+        <h2>Basic Information</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="wellNumber">Well Number:</label>
+                <input type="text" id="wellNumber" placeholder="e.g., 993278">
+                <span class="help-text">First 2 digits = year (77 = 1977)</span>
+            </div>
+            <div class="form-group">
+                <label for="drillerRegNo">Driller Reg. #:</label>
+                <input type="text" id="drillerRegNo" placeholder="e.g., 15">
+            </div>
+            <div class="form-group">
+                <label for="drillerName">Driller Name:</label>
+                <input type="text" id="drillerName" placeholder="e.g., FLEM HENSLEY">
+            </div>
+            <div class="form-group">
+                <label for="dateCompleted">Date Completed:</label>
+                <input type="date" id="dateCompleted">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h2>Owner & Location</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="ownerFirst">Owner First Name:</label>
+                <input type="text" id="ownerFirst" placeholder="e.g., RICHARD">
+            </div>
+            <div class="form-group">
+                <label for="ownerLast">Owner Last Name:</label>
+                <input type="text" id="ownerLast" placeholder="e.g., SOUTOR">
+            </div>
+            <div class="form-group">
+                <label for="community">Nearest Community:</label>
+                <input type="text" id="community" placeholder="e.g., SALMON RIVER">
+            </div>
+            <div class="form-group">
+                <label for="civicAddress">Civic Address:</label>
+                <input type="text" id="civicAddress" placeholder="e.g., 43 SUSAN CT">
+            </div>
+            <div class="form-group">
+                <label for="county">County:</label>
+                <input type="text" id="county" placeholder="e.g., Colchester">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h2>Well Construction Details</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="totalDepth">Total Depth (ft):</label>
+                <input type="number" id="totalDepth" placeholder="e.g., 92" step="0.1">
+            </div>
+            <div class="form-group">
+                <label for="casingDepth">Casing Depth (ft):</label>
+                <input type="number" id="casingDepth" placeholder="e.g., 30" step="0.1">
+            </div>
+            <div class="form-group">
+                <label for="depthToBedrock">Depth to Bedrock (ft):</label>
+                <input type="number" id="depthToBedrock" placeholder="e.g., 22" step="0.1">
+            </div>
+            <div class="form-group">
+                <label for="diameter">Diameter (inches):</label>
+                <input type="number" id="diameter" placeholder="e.g., 6" step="0.1">
+            </div>
+            <div class="form-group">
+                <label for="wallThickness">Wall Thickness (inches):</label>
+                <input type="number" id="wallThickness" placeholder="e.g., 0.25" step="0.01">
+            </div>
+            <div class="form-group">
+                <label for="bottomMaterial">Bottom Material:</label>
+                <input type="text" id="bottomMaterial" placeholder="e.g., SLATE">
+                <span class="help-text">e.g., SLATE, GRANITE, SANDSTONE</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h2>Water Test Information</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="staticLevel">Static Water Level (ft):</label>
+                <input type="number" id="staticLevel" placeholder="e.g., 12" step="0.1">
+            </div>
+            <div class="form-group">
+                <label for="yieldRate">Yield Rate (gpm):</label>
+                <input type="number" id="yieldRate" placeholder="e.g., 5" step="0.1">
+            </div>
+            <div class="form-group">
+                <label for="testDuration">Test Duration (hours):</label>
+                <input type="number" id="testDuration" placeholder="e.g., 1" step="0.1">
+            </div>
+            <div class="form-group">
+                <label for="drawdownDepth">Drawdown to (ft):</label>
+                <input type="number" id="drawdownDepth" placeholder="e.g., 29" step="0.1">
+            </div>
+            <div class="form-group">
+                <label for="recoveredTo">Recovered to (ft):</label>
+                <input type="number" id="recoveredTo" placeholder="e.g., 12" step="0.1">
+            </div>
+            <div class="form-group">
+                <label for="recoveryTime">Recovery Time (hours):</label>
+                <input type="number" id="recoveryTime" placeholder="e.g., 2" step="0.1">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h2>Map Reference & Coordinates</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="easting">UTM Easting:</label>
+                <input type="number" id="easting" placeholder="e.g., 481497" step="0.1">
+            </div>
+            <div class="form-group">
+                <label for="northing">UTM Northing:</label>
+                <input type="number" id="northing" placeholder="e.g., 5022656" step="0.1">
+            </div>
+            <div class="form-group">
+                <label for="mapPage">Map Page:</label>
+                <input type="text" id="mapPage" placeholder="e.g., 23">
+            </div>
+            <div class="form-group">
+                <label for="refLetter">Reference Letter:</label>
+                <input type="text" id="refLetter" placeholder="e.g., C" maxlength="1">
+            </div>
+            <div class="form-group">
+                <label for="refNumber">Reference Number:</label>
+                <input type="text" id="refNumber" placeholder="e.g., 2">
+            </div>
+            <div class="form-group">
+                <label for="roamerLetter">Roamer Letter:</label>
+                <input type="text" id="roamerLetter" placeholder="e.g., O" maxlength="1">
+            </div>
+            <div class="form-group">
+                <label for="roamerNumber">Roamer Number:</label>
+                <input type="text" id="roamerNumber" placeholder="e.g., 14">
+            </div>
+            <div class="form-group">
+                <label for="utmAccuracy">UTM Accuracy (m):</label>
+                <input type="number" id="utmAccuracy" placeholder="e.g., 12" step="0.1">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h2>Additional Comments</h2>
+        <div class="form-group">
+            <label for="comments">Comments:</label>
+            <textarea id="comments" rows="3" placeholder="e.g., DOMESTIC USE. CLEAR, SOFT WATER. NO ODOR. WELL BOTTOMED IN SLATE."></textarea>
+        </div>
+    </div>
+
+    <div class="button-group">
+        <button class="generate-btn" onclick="generateCSV()">Generate CSV Line</button>
+        <button class="copy-btn" onclick="copyToClipboard()">Copy to Clipboard</button>
+        <button class="reset-btn" onclick="resetForm()">Reset Form</button>
+    </div>
+
+    <div class="output-section">
+        <h2>CSV Output</h2>
+        <textarea id="csvOutput" readonly></textarea>
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        function generateCSV() {
+            const wellNumber = document.getElementById('wellNumber').value || '';
+            const drillerRegNo = document.getElementById('drillerRegNo').value || '';
+            const drillerName = document.getElementById('drillerName').value.toUpperCase() || '';
+            const dateCompleted = document.getElementById('dateCompleted').value ? 
+                document.getElementById('dateCompleted').value + ' 00:00:00' : '';
+            
+            const ownerFirst = document.getElementById('ownerFirst').value.toUpperCase() || '';
+            const ownerLast = document.getElementById('ownerLast').value.toUpperCase() || '';
+            const community = document.getElementById('community').value.toUpperCase() || '';
+            const civicAddress = document.getElementById('civicAddress').value.toUpperCase() || '';
+            const county = document.getElementById('county').value || '';
+            
+            const totalDepth = document.getElementById('totalDepth').value || '';
+            const casingDepth = document.getElementById('casingDepth').value || '';
+            const depthToBedrock = document.getElementById('depthToBedrock').value || '';
+            const diameter = document.getElementById('diameter').value || '';
+            const wallThickness = document.getElementById('wallThickness').value || '';
+            const bottomMaterial = document.getElementById('bottomMaterial').value.toUpperCase() || '';
+            
+            const staticLevel = document.getElementById('staticLevel').value || '';
+            const yieldRate = document.getElementById('yieldRate').value || '';
+            const testDuration = document.getElementById('testDuration').value || '1';
+            const drawdownDepth = document.getElementById('drawdownDepth').value || '';
+            const recoveredTo = document.getElementById('recoveredTo').value || '';
+            const recoveryTime = document.getElementById('recoveryTime').value || '';
+            
+            const easting = document.getElementById('easting').value || '';
+            const northing = document.getElementById('northing').value || '';
+            const mapPage = document.getElementById('mapPage').value || '';
+            const refLetter = document.getElementById('refLetter').value.toUpperCase() || '';
+            const refNumber = document.getElementById('refNumber').value || '';
+            const roamerLetter = document.getElementById('roamerLetter').value.toUpperCase() || '';
+            const roamerNumber = document.getElementById('roamerNumber').value || '';
+            const utmAccuracy = document.getElementById('utmAccuracy').value || '';
+            
+            const comments = document.getElementById('comments').value || '';
+            
+            const totalDrawdown = (drawdownDepth && staticLevel) ? 
+                (parseFloat(drawdownDepth) - parseFloat(staticLevel)).toFixed(1) : '';
+            
+            const fullAddress = civicAddress && community ? 
+                `"${civicAddress}, ${community}"` : '';
+            
+            const csvLine = [
+                wellNumber,
+                drillerRegNo,
+                drillerName,
+                '', // driller company
+                'Drilled',
+                dateCompleted,
+                ownerFirst,
+                ownerLast,
+                '', // contractor
+                community,
+                'ATLAS',
+                fullAddress,
+                '', // lot number
+                '', // subdivision
+                '', // property PID
+                county,
+                '', // postal code
+                '1.0', // final status
+                '1.0', // water use
+                '1.0', // method of drilling
+                '', // drilling fluids
+                '1.0', // wq colour
+                '', // wq taste
+                '', // wq odour
+                '', // wq other
+                bottomMaterial,
+                '', // stone reservoir material
+                '', // backfill material
+                '', // drive shoe make
+                '', // grout type
+                '', // packer make
+                '1.0', // well finish
+                '', // screen make
+                '', // screen material
+                '', // ic astm spec
+                '', // apron material
+                '', // ic material
+                '', // oc material
+                '', // oc astm spec
+                '1.0', // wy method
+                yieldRate,
+                testDuration,
+                totalDepth,
+                staticLevel,
+                drawdownDepth,
+                totalDrawdown,
+                recoveredTo,
+                recoveryTime,
+                '', // recovery by min
+                'False', // overflow
+                '', // volume removed
+                '', // depth to index level
+                '', // water level recovered to
+                '', // recovered to index level
+                yieldRate, // estimated yield
+                depthToBedrock,
+                totalDepth,
+                '', // fractures 1-6
+                '', '', '', '', '',
+                '0.0', // oc from
+                casingDepth,
+                diameter,
+                wallThickness,
+                '', // ic from
+                '', // ic to
+                '', // ic diameter
+                '', // ic wall thickness
+                '', // length casing above by ft
+                '', // length casing above by in
+                '', // screen length 1
+                '', // screen from 1
+                '', // screen to 1
+                '', // screen slot size 1
+                '', // screen length 2
+                '', // screen from 2
+                '', // screen to 2
+                '', // screen slot size 2
+                '', // screen pack size
+                '', // screen pack from
+                '', // screen pack to
+                '', // cd property line
+                '', // cd building
+                '', // cd roadway
+                '', // cd road name
+                '', // cd onsite septic
+                '', // cd offsite septic
+                '', // cd watercourse
+                '', // cd well
+                '', // cd oil tank
+                '', // cd cesspool
+                '', // dw depth of liner
+                '', // dw stone reservoir volume
+                '', // dw stone reservoir material size
+                '', // dw apron depth
+                '', // dw apron thickness
+                '', // dw apron width
+                '', // dw apron volume
+                '', // dw backfill volume
+                '', // chem data
+                'False',
+                `"${comments}"`,
+                easting,
+                northing,
+                '2.0', // atlas or map
+                mapPage,
+                refLetter,
+                refNumber,
+                roamerLetter,
+                roamerNumber,
+                '', // map sheet
+                '', // reference map
+                '', // tract
+                '', // claim
+                '', // well location sketch
+                'False', // well sketch
+                'False', // wy depth to water before pump
+                '', // wy depth to water after pump
+                '', // dw depth to sealed liner
+                '', // comments2
+                utmAccuracy,
+                '' // final empty field
+            ].join(',');
+            
+            document.getElementById('csvOutput').value = csvLine;
+            
+            const status = document.getElementById('status');
+            status.className = 'status success';
+            status.textContent = 'CSV line generated successfully!';
+        }
+        
+        function copyToClipboard() {
+            const output = document.getElementById('csvOutput');
+            output.select();
+            document.execCommand('copy');
+            
+            const status = document.getElementById('status');
+            status.className = 'status success';
+            status.textContent = 'Copied to clipboard!';
+        }
+        
+        function resetForm() {
+            document.querySelectorAll('input, textarea').forEach(el => el.value = '');
+            document.getElementById('csvOutput').value = '';
+            document.getElementById('status').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
