@@ -420,20 +420,26 @@ print(f"Corrected static water level stats:")
 print("\n=== APPLYING UNIT CONVERSIONS ===")
 
 # Convert all depth measurements from feet to meters
-# DEPTH is in feet, convert to meters
+# Convert all depth measurements from feet to meters
 if 'DEPTH' in wells.columns:
     wells['DEPTH_M'] = wells['DEPTH'] * 0.3048
     print(f"✅ Converted DEPTH from feet to meters")
 
+# Note: current_water_level_m_observed already created above from WYSTATICLEVEL
+
+# Convert yield from GPM to L/min if we have yield data
+if 'YIELD' in wells.columns:
+    wells['YIELD_LMIN'] = wells['YIELD'] * 3.78541
+    print(f"✅ Converted YIELD from GPM to L/min")
+
+# Ensure static water level metric conversion is correct
 # Ensure static water level metric conversion is correct
 if 'STATIC_WATER_LEVEL' in wells.columns:
     if 'current_water_level_m_observed' not in wells.columns:
         wells['current_water_level_m_observed'] = wells['STATIC_WATER_LEVEL'] * 0.3048
         print(f"✅ Created metric static water level from feet")
     else:
-        # Double-check the conversion
-        wells['current_water_level_m_observed'] = wells['STATIC_WATER_LEVEL'] * 0.3048
-        print(f"✅ Verified metric static water level conversion")
+        print(f"✅ Metric static water level already exists, skipping conversion")
 
 # Convert yield from GPM to L/min if we have yield data
 if 'YIELD' in wells.columns:
@@ -462,6 +468,23 @@ print("Unit conversions completed successfully")
 # =============================================================================
 # END OF UNIT CONVERSION BLOCK
 # =============================================================================
+
+# =============================================================================
+# DEBUG UNIT CONVERSIONS
+# =============================================================================
+print("\n=== UNIT CONVERSION VERIFICATION ===")
+sample_wells = wells.head(3)
+for idx, row in sample_wells.iterrows():
+    print(f"\nWell {row.get('WELL_ID', idx)}:")
+    print(f"  DEPTH (raw): {row.get('DEPTH')}")
+    print(f"  DEPTH_M (converted): {row.get('DEPTH_M')}")
+    print(f"  STATIC_WATER_LEVEL (raw): {row.get('STATIC_WATER_LEVEL')}")
+    print(f"  current_water_level_m_observed: {row.get('current_water_level_m_observed')}")
+    print(f"  Expected DEPTH_M: {row.get('DEPTH', 0) * 0.3048:.2f}")
+    print(f"  Expected current_water_level: {row.get('STATIC_WATER_LEVEL', 0) * 0.3048:.2f}")
+
+
+
 # AQUIFER CLASSIFICATION DEBUGGING
 print("\n=== AQUIFER CLASSIFICATION DEBUG ===")
 print(f"Looking for shapefile files:")
@@ -508,7 +531,7 @@ try:
             wells["WELL_ID"] = wells.index.astype(str)
 
     # assign static level to current_water_level_m
-    wells["current_water_level_m"] = wells["STATIC_WATER_LEVEL"].copy()
+    
 
     # try to update from current_levels - matching as strings
     current_levels["WELL_ID"] = current_levels["WELL_ID"].astype(str)
@@ -521,7 +544,9 @@ try:
     print(f"Updated {updated_count} well rows with observation current levels (matches by WELL_ID)")
 except FileNotFoundError:
     print("Observation file not found – using corrected static water levels only")
-    wells["current_water_level_m"] = wells["STATIC_WATER_LEVEL"].copy()
+    # Only create if it doesn't exist (it should already exist from earlier conversion)
+    if "current_water_level_m_observed" not in wells.columns:
+        wells["current_water_level_m_observed"] = wells["STATIC_WATER_LEVEL"] * 0.3048
 except Exception as e:
     print(f"Warning: could not load/parse observation data ({e}) – using corrected static levels only")
     wells["current_water_level_m"] = wells["STATIC_WATER_LEVEL"].copy()
@@ -533,15 +558,32 @@ def estimate_pump_depth(depth_ft):
     """Estimate pump depth in meters from well depth in feet"""
     try:
         depth_ft = float(depth_ft)
-        # Convert feet to meters first
+        if pd.isna(depth_ft) or depth_ft <= 0:
+            return np.nan
+        # Convert to meters first
         depth_m = depth_ft * 0.3048
-        # Pump is typically at 80% of depth or 2.5m from bottom, whichever is shallower
+        # Pump is typically at 80% of depth or 2.5m from bottom
         return min(depth_m * 0.8, depth_m - 2.5)
     except Exception:
         return np.nan
 
 wells["pump_depth_m"] = wells["DEPTH"].apply(estimate_pump_depth)
-wells["buffer_m"] = wells["pump_depth_m"] - wells["current_water_level_m"]
+
+# Diagnostic: Check data availability
+print("\n=== DATA AVAILABILITY CHECK ===")
+total_wells = len(wells)
+wells_with_depth = wells["DEPTH"].notna().sum()
+wells_with_swl = wells["current_water_level_m_observed"].notna().sum()
+wells_with_pump_depth = wells["pump_depth_m"].notna().sum()
+wells_with_both = (wells["pump_depth_m"].notna() & wells["current_water_level_m_observed"].notna()).sum()
+
+print(f"Total wells: {total_wells}")
+print(f"Wells with DEPTH data: {wells_with_depth} ({wells_with_depth/total_wells*100:.1f}%)")
+print(f"Wells with water level data: {wells_with_swl} ({wells_with_swl/total_wells*100:.1f}%)")
+print(f"Wells with calculable pump depth: {wells_with_pump_depth} ({wells_with_pump_depth/total_wells*100:.1f}%)")
+print(f"Wells with BOTH depth and water level: {wells_with_both} ({wells_with_both/total_wells*100:.1f}%)")
+print(f"Wells MISSING critical data: {total_wells - wells_with_both}")
+
 
 def classify_risk(buffer):
     if pd.isna(buffer):
@@ -554,7 +596,7 @@ def classify_risk(buffer):
         return "Moderate risk - 2-5m buffer"
     return "Low risk - >5m buffer"
 
-wells["drying_risk"] = wells["buffer_m"].apply(classify_risk)
+#wells["drying_risk"] = wells["buffer_m"].apply(classify_risk)
 
 # ---------------------------
 # MULTI-STATION HYDROMETRIC FUNCTIONS
@@ -673,8 +715,7 @@ if "YIELD" in wells.columns:
         else "Adequate yield (≥10 L/min)" if pd.notna(x) and x >= 10
         else "Unknown yield"
     )
-    low_yield_mask = (wells["YIELD"] < 5) & (wells["YIELD"].notna())
-    wells.loc[low_yield_mask & (wells["drying_risk"].str.contains("Moderate")), "drying_risk"] = "High risk - Low yield well"
+    # Note: Low yield adjustment moved to after risk calculation
 
 # ---------------------------
 # 6. Aquifer classification using GeoPandas (if coords and shapefiles exist)
@@ -857,8 +898,19 @@ else:
 station_data = fetch_multi_station_discharge(COLCHESTER_STATIONS, WSC_API_URL)
 drought_level = apply_regional_drought_stress(wells, station_data)
 
+print("\n=== CRITICAL DEBUG: Check Well 52024 Before Drought Calc ===")
+test_well = wells[wells["WELL_ID"].astype(str) == "52024"]
+if not test_well.empty:
+    swl = test_well["STATIC_WATER_LEVEL"].values[0]
+    cwl = test_well["current_water_level_m_observed"].values[0]
+    print(f"STATIC_WATER_LEVEL (feet): {swl}")
+    print(f"current_water_level_m_observed: {cwl}")
+    print(f"Should be (converted): {swl * 0.3048:.2f}m")
+    print(f"Match: {abs(cwl - (swl * 0.3048)) < 0.01}")
+
+
 # Calculate Stressed Water Level
-wells["drought_water_level_m"] = wells["current_water_level_m"] + wells["drought_drawdown_m"]
+wells["drought_water_level_m"] = wells["current_water_level_m_observed"] + wells["drought_drawdown_m"]
 
 # Recalculate Buffer and Risk (The final risk output is now the STRESSED risk)
 wells["buffer_m_drought"] = wells["pump_depth_m"] - wells["drought_water_level_m"]
@@ -867,6 +919,11 @@ wells["drying_risk_drought"] = wells["buffer_m_drought"].apply(classify_risk)
 # Overwrite Final Columns
 wells["buffer_m"] = wells["buffer_m_drought"]
 wells["drying_risk"] = wells["drying_risk_drought"]
+
+# NOW apply yield adjustment (after drying_risk exists)
+if "YIELD" in wells.columns:
+    low_yield_mask = (wells["YIELD"] < 5) & (wells["YIELD"].notna())
+    wells.loc[low_yield_mask & (wells["drying_risk"].str.contains("Moderate", na=False)), "drying_risk"] = "High risk - Low yield well"
 
 # Rename columns for clarity in output
 wells = wells.rename(columns={"current_water_level_m": "current_water_level_m_observed"})

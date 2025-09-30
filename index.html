@@ -162,7 +162,7 @@ table.dataTable td .well-link:hover {{
 <div class="container-fluid py-4">
 
 <h1 class='mb-3'>Colchester County Well Drying Risk Dashboard</h1>
-<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-30 17:55 | Wells mapped: 5000</p>
+<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-30 18:43 | Wells mapped: 5000</p>
 
 <div class="drought-status drought-severe">
     <strong>Regional Drought Status:</strong> 🚨 SEVERE DROUGHT CONDITIONS - 67%+ of monitoring stations show critical low flows
@@ -223,9 +223,9 @@ table.dataTable td .well-link:hover {{
 
 <div class="row">
   <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">9013</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">2422</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">148</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">-5.28</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">1567</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">76</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">7.76</div></div></div>
 </div>
 
 
@@ -256,23 +256,27 @@ table.dataTable td .well-link:hover {{
   <tbody>
     <tr>
       <td>No data</td>
-      <td>5445</td>
-    </tr>
-    <tr>
-      <td>CRITICAL - Well may be dry</td>
-      <td>2422</td>
+      <td>5459</td>
     </tr>
     <tr>
       <td>Low risk - &gt;5m buffer</td>
-      <td>844</td>
+      <td>1845</td>
+    </tr>
+    <tr>
+      <td>CRITICAL - Well may be dry</td>
+      <td>1567</td>
     </tr>
     <tr>
       <td>Moderate risk - 2-5m buffer</td>
-      <td>154</td>
+      <td>66</td>
     </tr>
     <tr>
       <td>High risk - &lt;2m buffer</td>
-      <td>148</td>
+      <td>63</td>
+    </tr>
+    <tr>
+      <td>High risk - Low yield well</td>
+      <td>13</td>
     </tr>
   </tbody>
 </table>
@@ -284,6 +288,7 @@ table.dataTable td .well-link:hover {{
       <th>drying_risk</th>
       <th>CRITICAL - Well may be dry</th>
       <th>High risk - &lt;2m buffer</th>
+      <th>High risk - Low yield well</th>
       <th>Low risk - &gt;5m buffer</th>
       <th>Moderate risk - 2-5m buffer</th>
       <th>No data</th>
@@ -295,24 +300,27 @@ table.dataTable td .well-link:hover {{
       <th></th>
       <th></th>
       <th></th>
+      <th></th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <th>Bedrock</th>
-      <td>1716</td>
-      <td>120</td>
-      <td>660</td>
-      <td>121</td>
-      <td>4201</td>
+      <td>1040</td>
+      <td>36</td>
+      <td>8</td>
+      <td>1485</td>
+      <td>38</td>
+      <td>4211</td>
     </tr>
     <tr>
       <th>Surficial</th>
-      <td>693</td>
-      <td>28</td>
-      <td>177</td>
-      <td>33</td>
-      <td>1158</td>
+      <td>522</td>
+      <td>25</td>
+      <td>5</td>
+      <td>349</td>
+      <td>26</td>
+      <td>1162</td>
     </tr>
   </tbody>
 </table>
@@ -370,13 +378,13 @@ table.dataTable td .well-link:hover {{
 const dtColumns = [{"data": "WELL_ID", "title": "Well ID"}, {"data": "location_display", "title": "Location"}, {"data": "Map Link", "title": "Map"}, {"data": "DEPTH", "title": "Well Depth"}, {"data": "DEPTH_M", "title": "Well Depth"}, {"data": "STATIC_WATER_LEVEL", "title": "Static Water Level"}, {"data": "current_water_level_m_observed", "title": "Current Water Level"}, {"data": "drought_drawdown_m", "title": "Drought Stress"}, {"data": "stressed_water_level_m", "title": "Stressed Water Level"}, {"data": "pump_depth_m", "title": "Pump Depth"}, {"data": "buffer_m", "title": "Safety Buffer"}, {"data": "drying_risk", "title": "Risk Level"}, {"data": "YIELD", "title": "Yield"}, {"data": "YIELD_LMIN", "title": "Yield"}, {"data": "yield_category", "title": "Yield Category"}, {"data": "aquifer_type", "title": "Aquifer Type"}]; 
 const dataJsonFile = 'wells_data.json';
 const mapDataFile = 'wells_map_data.json';
-const mapCenter = [45.39167505175504, -63.37505302973441];
+const mapCenter = [45.38992727747837, -63.380214811885565];
 </script>
 <script> 
 const dtColumns = [{"data": "WELL_ID", "title": "Well ID"}, {"data": "location_display", "title": "Location"}, {"data": "Map Link", "title": "Map"}, {"data": "DEPTH", "title": "Well Depth"}, {"data": "DEPTH_M", "title": "Well Depth"}, {"data": "STATIC_WATER_LEVEL", "title": "Static Water Level"}, {"data": "current_water_level_m_observed", "title": "Current Water Level"}, {"data": "drought_drawdown_m", "title": "Drought Stress"}, {"data": "stressed_water_level_m", "title": "Stressed Water Level"}, {"data": "pump_depth_m", "title": "Pump Depth"}, {"data": "buffer_m", "title": "Safety Buffer"}, {"data": "drying_risk", "title": "Risk Level"}, {"data": "YIELD", "title": "Yield"}, {"data": "YIELD_LMIN", "title": "Yield"}, {"data": "yield_category", "title": "Yield Category"}, {"data": "aquifer_type", "title": "Aquifer Type"}]; 
 const dataJsonFile = 'wells_data.json';
 const mapDataFile = 'wells_map_data.json';
-const mapCenter = [45.39167505175504, -63.37505302973441];
+const mapCenter = [45.38992727747837, -63.380214811885565];
 </script>
 
 <script>
