@@ -1587,25 +1587,29 @@ table.dataTable td .well-link:hover {{
 
 /* Map Modal Styles - FIXED */
 #mapModal .modal-dialog {{ 
-    max-width: 95vw; 
-    height: 90vh;
+    max-width: 95vw;
     margin: 1.75rem auto;
 }}
 
 #mapModal .modal-content {{ 
-    height: 100%; 
+    height: 85vh;
 }}
 
 #mapModal .modal-body {{ 
     padding: 0; 
-    height: calc(100% - 56px); /* Subtract header height */
+    height: calc(100% - 60px);
     position: relative;
 }}
 
 #wellMap {{ 
     height: 100% !important; 
     width: 100% !important;
-    min-height: 500px;
+    min-height: 400px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
 }}
 
 .map-controls {{ 
