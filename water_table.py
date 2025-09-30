@@ -960,6 +960,13 @@ results = wells[out_cols].sort_values("buffer_m", ascending=True)
 results.to_csv(output_csv, index=False)
 print(f"\nDetailed results saved to {output_csv}")
 
+# Debug: verify all columns exist
+print("\n=== DATA VALIDATION ===")
+print(f"Columns being exported: {out_cols}")
+print(f"Sample row check:")
+sample_row = results.iloc[0].to_dict()
+for col in out_cols:
+    print(f"  {col}: {sample_row.get(col, 'MISSING')}")
 # Replace the generate_detailed_well_report function and related code with this:
 
 # Replace the generate_detailed_well_report function and related code with this:
@@ -1619,6 +1626,10 @@ def create_well_report_link(well_id):
 
 # Prepare the main table for client-side rendering
 all_wells_display = results.copy()
+
+print("\n=== DISPLAY COLUMNS CHECK ===")
+print(f"all_wells_display columns: {list(all_wells_display.columns)}")
+print(f"all_wells_display shape: {all_wells_display.shape}")
 
 # === CHECK FOR DUPLICATES IN SOURCE DATA ===
 print("Checking for duplicate columns in source data...")
