@@ -2181,12 +2181,6 @@ html_parts.append(f"""
 html_parts.append("</div>") # end container
 
 # Inject column definitions and define the data file paths
-html_parts.append(f"""<script> 
-const dtColumns = {datatables_columns}; 
-const dataJsonFile = '{data_json_file}';
-const mapDataFile = '{map_data_json_file}';
-const mapCenter = [{map_center_lat}, {map_center_lng}];
-</script>""")
 
 # DataTables and Map initialization script
 html_parts.append(f"""<script> 
@@ -2451,51 +2445,74 @@ function highlightWellOnMap(wellId) {
 let currentUnits = 'metric';
 let originalMetricData = null;
 
+// Store original data when table loads
+$(document).ready(function() {
+  fetch(dataJsonFile)
+    .then(response => response.json())
+    .then(allWellsData => {
+        // STORE ORIGINAL DATA BEFORE ANY MODIFICATIONS
+        originalMetricData = JSON.parse(JSON.stringify(allWellsData));
+        
+        currentTable = $('#all_wells_table').DataTable({
+            data: allWellsData,
+            columns: dtColumns,
+            pageLength: 25,
+            lengthMenu: [10, 25, 50, 100, {label: "All", value: -1}],
+            dom: 'Bfrtip',
+            buttons: ['copy', 'csv', 'excel', 'print'],
+            scrollX: true,
+            responsive: true,
+            order: [[findColumnIndex('buffer_m'), 'asc']]
+        });
+        // ... rest of your table initialization
+    });
+});
+
 function toggleUnits() {
-    if (!currentTable) {
+    if (!currentTable || !originalMetricData) {
         console.error('Table not initialized yet');
         return;
     }
     
     const button = document.getElementById('unitToggle');
     
-    if (!originalMetricData) {
-        const allData = currentTable.rows().data().toArray();
-        originalMetricData = allData.map(row => JSON.parse(JSON.stringify(row)));
-    }
-    
     if (currentUnits === 'metric') {
         currentUnits = 'imperial';
         button.textContent = 'Switch to Metric';
         
-        currentTable.rows().every(function() {
-            const row = this.data();
+        // Convert FROM metric TO imperial using ORIGINAL metric data
+        currentTable.clear();
+        const imperialData = originalMetricData.map(row => {
+            const newRow = JSON.parse(JSON.stringify(row)); // Deep copy
             
-            if (row.DEPTH_M && !isNaN(parseFloat(row.DEPTH_M))) {
-                row.DEPTH_M = (parseFloat(row.DEPTH_M) * 3.28084).toFixed(1);
+            if (newRow.DEPTH_M && !isNaN(parseFloat(newRow.DEPTH_M))) {
+                newRow.DEPTH_M = (parseFloat(newRow.DEPTH_M) * 3.28084).toFixed(1);
             }
-            if (row.pump_depth_m && !isNaN(parseFloat(row.pump_depth_m))) {
-                row.pump_depth_m = (parseFloat(row.pump_depth_m) * 3.28084).toFixed(1);
+            if (newRow.pump_depth_m && !isNaN(parseFloat(newRow.pump_depth_m))) {
+                newRow.pump_depth_m = (parseFloat(newRow.pump_depth_m) * 3.28084).toFixed(1);
             }
-            if (row.buffer_m && !isNaN(parseFloat(row.buffer_m))) {
-                row.buffer_m = (parseFloat(row.buffer_m) * 3.28084).toFixed(1);
+            if (newRow.buffer_m && !isNaN(parseFloat(newRow.buffer_m))) {
+                newRow.buffer_m = (parseFloat(newRow.buffer_m) * 3.28084).toFixed(1);
             }
-            if (row.current_water_level_m_observed && !isNaN(parseFloat(row.current_water_level_m_observed))) {
-                row.current_water_level_m_observed = (parseFloat(row.current_water_level_m_observed) * 3.28084).toFixed(1);
+            if (newRow.current_water_level_m_observed && !isNaN(parseFloat(newRow.current_water_level_m_observed))) {
+                newRow.current_water_level_m_observed = (parseFloat(newRow.current_water_level_m_observed) * 3.28084).toFixed(1);
             }
-            if (row.drought_drawdown_m && !isNaN(parseFloat(row.drought_drawdown_m))) {
-                row.drought_drawdown_m = (parseFloat(row.drought_drawdown_m) * 3.28084).toFixed(1);
+            if (newRow.drought_drawdown_m && !isNaN(parseFloat(newRow.drought_drawdown_m))) {
+                newRow.drought_drawdown_m = (parseFloat(newRow.drought_drawdown_m) * 3.28084).toFixed(1);
             }
-            if (row.stressed_water_level_m && !isNaN(parseFloat(row.stressed_water_level_m))) {
-                row.stressed_water_level_m = (parseFloat(row.stressed_water_level_m) * 3.28084).toFixed(1);
+            if (newRow.stressed_water_level_m && !isNaN(parseFloat(newRow.stressed_water_level_m))) {
+                newRow.stressed_water_level_m = (parseFloat(newRow.stressed_water_level_m) * 3.28084).toFixed(1);
             }
-            if (row.YIELD_LMIN && !isNaN(parseFloat(row.YIELD_LMIN))) {
-                row.YIELD_LMIN = (parseFloat(row.YIELD_LMIN) / 3.78541).toFixed(1);
+            if (newRow.YIELD_LMIN && !isNaN(parseFloat(newRow.YIELD_LMIN))) {
+                newRow.YIELD_LMIN = (parseFloat(newRow.YIELD_LMIN) / 3.78541).toFixed(1);
             }
             
-            this.data(row);
+            return newRow;
         });
         
+        currentTable.rows.add(imperialData).draw();
+        
+        // Update headers
         updateHeader('DEPTH_M', 'Well Depth (ft)');
         updateHeader('pump_depth_m', 'Pump Depth (ft)');
         updateHeader('buffer_m', 'Safety Buffer (ft)');
@@ -2508,12 +2525,11 @@ function toggleUnits() {
         currentUnits = 'metric';
         button.textContent = 'Switch to Imperial';
         
-        currentTable.rows().every(function(idx) {
-            if (originalMetricData[idx]) {
-                this.data(originalMetricData[idx]);
-            }
-        });
+        // Restore original metric data
+        currentTable.clear();
+        currentTable.rows.add(originalMetricData).draw();
         
+        // Update headers
         updateHeader('DEPTH_M', 'Well Depth (m)');
         updateHeader('pump_depth_m', 'Pump Depth (m)');
         updateHeader('buffer_m', 'Safety Buffer (m)');
@@ -2522,8 +2538,6 @@ function toggleUnits() {
         updateHeader('stressed_water_level_m', 'Stressed Water Level (m)');
         updateHeader('YIELD_LMIN', 'Yield (L/min)');
     }
-    
-    currentTable.draw(false);
 }
 
 function updateHeader(columnData, newTitle) {
