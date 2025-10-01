@@ -1,3 +1,4 @@
+
 # water_table.py - MULTI-STATION PATCHED VERSION
 import pandas as pd
 import numpy as np
@@ -1721,7 +1722,7 @@ report_count = 0
 # ---------------------------
 # 10. Prepare map data for wells with valid coordinates
 # ---------------------------
-def prepare_map_data(wells_df, max_points=5000):
+def prepare_map_data(wells_df, max_points=10000):
     """Prepare optimized map data with clustering for large datasets"""
     
     print("=== DEBUGGING COORDINATE DATA ===")
@@ -1855,23 +1856,23 @@ def prepare_map_data(wells_df, max_points=5000):
     print(f"Final: {len(map_wells)} wells available for mapping")
     
     # If too many points, prioritize high-risk wells and sample the rest
-    if len(map_wells) > max_points:
-        # Get all critical and high risk wells
-        priority_wells = map_wells[
-            map_wells["drying_risk"].str.contains("CRITICAL|High risk", na=False)
-        ]
+    # if len(map_wells) > max_points:
+        #Get all critical and high risk wells
+        # priority_wells = map_wells[
+            # map_wells["drying_risk"].str.contains("CRITICAL|High risk", na=False)
+        # ]
         
-        # Sample remaining wells
-        remaining_wells = map_wells[
-            ~map_wells["drying_risk"].str.contains("CRITICAL|High risk", na=False)
-        ]
+        #Sample remaining wells
+        # remaining_wells = map_wells[
+            # ~map_wells["drying_risk"].str.contains("CRITICAL|High risk", na=False)
+        # ]
         
-        remaining_sample_size = max(0, max_points - len(priority_wells))
-        if len(remaining_wells) > remaining_sample_size:
-            remaining_wells = remaining_wells.sample(n=remaining_sample_size, random_state=42)
+        # remaining_sample_size = max(0, max_points - len(priority_wells))
+        # if len(remaining_wells) > remaining_sample_size:
+            # remaining_wells = remaining_wells.sample(n=remaining_sample_size, random_state=42)
         
-        map_wells = pd.concat([priority_wells, remaining_wells])
-        print(f"Optimized to {len(map_wells)} wells for mapping (prioritizing high-risk wells)")
+        # map_wells = pd.concat([priority_wells, remaining_wells])
+        # print(f"Optimized to {len(map_wells)} wells for mapping (prioritizing high-risk wells)")
     
     # Create map data with risk-based styling
     map_data = []
