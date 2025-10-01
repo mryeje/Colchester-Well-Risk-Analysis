@@ -1102,24 +1102,159 @@ WELL_REPORT_TEMPLATE = """<!DOCTYPE html>
                 </div>
                 
                 <div class="info-section">
-                    <h3>Understanding Your Well's Safety Margin</h3>
-                    <div class="explanation">
-                        <p>Think of your well like a straw in a glass of water. The <strong>safety margin</strong> (or "buffer") 
-                        is how much water is above the bottom of your straw (pump). If the water level drops below your straw, 
-                        you'll suck air instead of water.</p>
-                        
-                        <p><strong>Your current safety margin: $buffer_display</strong></p>
-                        
-                        <ul>
-                            <li><strong>Positive numbers are good</strong> - You have water above your pump</li>
-                            <li><strong>Numbers near zero are concerning</strong> - Your pump is close to the water surface</li>
-                            <li><strong>Negative numbers are critical</strong> - Your pump may be above the water level</li>
-                        </ul>
-                        
-                        <p>We calculate this by looking at where your pump likely sits in the well (usually about 80% down 
-                        the total depth) and comparing that to where the water level is now, including stress from drought conditions.</p>
-                    </div>
-                </div>
+    <h3>Understanding Your Well's Safety Buffer Calculation</h3>
+    <div class="explanation">
+        <p>Your well's <strong>safety buffer</strong> is the most important number in this report. It tells you how much 
+        margin you have before your pump runs dry. Here's exactly how we calculated it for your well:</p>
+        
+        <h4>The Calculation (Step by Step)</h4>
+        <p><strong>Your Safety Buffer = Pump Depth - Stressed Water Level</strong></p>
+        
+        <div class="tech-details" style="background: #f0f8ff; padding: 15px; margin: 15px 0; border-radius: 5px;">
+            <p><strong>For your well specifically:</strong></p>
+            <ul>
+                <li><strong>Total Well Depth:</strong> $depth_display
+                    <br><em>This is how deep your well was drilled into the ground.</em></li>
+                
+                <li><strong>Estimated Pump Depth:</strong> $pump_depth_display
+                    <br><em>We estimate your pump sits at 80% of total depth, or 2.5m from the bottom (whichever is shallower). 
+                    This is standard practice to prevent the pump from drawing sediment from the bottom.</em></li>
+                
+                <li><strong>Original Static Water Level:</strong> $static_level_display
+                    <br><em>This was the depth to water when your well was first drilled or last measured.</em></li>
+                
+                <li><strong>Drought Stress Applied:</strong> $drought_stress_display
+                    <br><em>Based on current conditions in regional rivers and streams, we added this amount to simulate 
+                    how low your water level might drop during continued dry conditions.</em></li>
+                
+                <li><strong>Stressed Water Level:</strong> $stressed_level_display
+                    <br><em>Original water level + drought stress = worst-case water depth</em></li>
+                
+                <li><strong>Your Safety Buffer:</strong> <span style="color: $risk_color; font-weight: bold;">$buffer_display</span>
+                    <br><em>Pump depth minus stressed water level = how much margin you have</em></li>
+            </ul>
+        </div>
+        
+        <h4>What the Safety Buffer Means</h4>
+        <ul>
+            <li><strong>Positive numbers are good</strong> - Water is above your pump by this amount</li>
+            <li><strong>Numbers near zero (0-2m) are concerning</strong> - Very little margin for error</li>
+            <li><strong>Negative numbers are critical</strong> - Your pump may already be above the water level</li>
+        </ul>
+        
+        <h4>Why This Number Matters</h4>
+        <p>Think of your well like a straw in a glass of water. If the water level drops below the bottom of your 
+        straw (pump), you'll suck air instead of water. The safety buffer tells you how much room you have before 
+        that happens. A larger buffer means you're safer during droughts and high-usage periods.</p>
+    </div>
+</div>
+
+<div class="info-section">
+    <h3>All Factors That Determine Your Risk Level</h3>
+    <div class="explanation">
+        <p>Your well's risk rating isn't based on just one factor - it's a comprehensive assessment. Here are 
+        all the factors we considered:</p>
+        
+        <h4>1. Safety Buffer (Primary Factor)</h4>
+        <div style="margin-left: 20px;">
+            <p><strong>Your buffer: $buffer_display</strong></p>
+            <p>This is the single most important factor. The risk categories are:</p>
+            <ul>
+                <li><strong>CRITICAL:</strong> Buffer less than 0m (pump may be dry)</li>
+                <li><strong>HIGH RISK:</strong> Buffer 0-2m (very little margin)</li>
+                <li><strong>MODERATE RISK:</strong> Buffer 2-5m (some margin, monitor closely)</li>
+                <li><strong>LOW RISK:</strong> Buffer greater than 5m (good margin)</li>
+            </ul>
+        </div>
+        
+        <h4>2. Regional Drought Conditions</h4>
+        <div style="margin-left: 20px;">
+            <p><strong>Current status: $drought_status</strong></p>
+            <p>We monitor three major river systems across Colchester County:</p>
+            <ul>
+                <li>Salmon River near Truro (central region)</li>
+                <li>Economy River near Economy (north coast)</li>
+                <li>Great Village River at Great Village (north-central)</li>
+            </ul>
+            <p>When these rivers show critically low flows, it indicates regional groundwater stress. We apply 
+            additional drawdown to your well calculation based on how many stations are in critical condition:</p>
+            <ul>
+                <li><strong>SEVERE:</strong> 67%+ of stations critical → 4.0m additional stress</li>
+                <li><strong>MODERATE:</strong> 33-66% of stations critical → 3.0m additional stress</li>
+                <li><strong>NORMAL:</strong> Less than 33% critical → 2.0m standard stress</li>
+            </ul>
+        </div>
+        
+        <h4>3. Well Yield (Flow Rate)</h4>
+        <div style="margin-left: 20px;">
+            <p><strong>Your well's yield: $yield_display</strong></p>
+            <p>Low-yield wells (less than 5 L/min) receive an upgraded risk classification because they:</p>
+            <ul>
+                <li>Recover more slowly after heavy use</li>
+                <li>Are more sensitive to water level drops</li>
+                <li>Have less capacity to meet household demands</li>
+            </ul>
+            <p>If your well has low yield AND moderate buffer, we upgrade the risk to "High" as a precaution.</p>
+        </div>
+        
+        <h4>4. Aquifer Type</h4>
+        <div style="margin-left: 20px;">
+            <p><strong>Your aquifer: $aquifer_display</strong></p>
+            <p><strong>Bedrock aquifers</strong> store water in rock fractures. They can be very reliable but:</p>
+            <ul>
+                <li>May show more seasonal variation</li>
+                <li>Take longer to recover after drawdown</li>
+                <li>Are more sensitive to drought conditions</li>
+            </ul>
+            <p><strong>Surficial aquifers</strong> store water in soil and sand layers. They:</p>
+            <ul>
+                <li>Often recharge more quickly from rainfall</li>
+                <li>May be more variable between wet and dry seasons</li>
+                <li>Can be affected by nearby water use</li>
+            </ul>
+        </div>
+        
+        <h4>5. Well Depth and Construction</h4>
+        <div style="margin-left: 20px;">
+            <p><strong>Your well depth: $depth_display</strong></p>
+            <p>Deeper wells generally have advantages:</p>
+            <ul>
+                <li>Access water from multiple aquifer zones</li>
+                <li>More total water storage capacity</li>
+                <li>Less affected by seasonal surface water changes</li>
+            </ul>
+            <p>However, if the pump can't be lowered further (due to well construction or depth), even a deep 
+            well can run dry if water levels drop.</p>
+        </div>
+        
+        <h4>6. Data Quality and Uncertainty</h4>
+        <div style="margin-left: 20px;">
+            <p>We use historical well construction records, which may be:</p>
+            <ul>
+                <li>Several years or decades old</li>
+                <li>Based on initial drilling conditions (water levels may have changed)</li>
+                <li>Subject to measurement variations or data entry issues</li>
+            </ul>
+            <p>This is why we apply conservative drought stress testing - to account for uncertainty and 
+            provide a margin of safety in our risk assessment.</p>
+        </div>
+        
+        <h4>Important Limitations</h4>
+        <div style="background: #fff3cd; padding: 10px; border-radius: 5px; border-left: 4px solid #ffc107;">
+            <p><strong>What we DON'T know about your specific well:</strong></p>
+            <ul>
+                <li>Exact current water level (we use historical data + drought modeling)</li>
+                <li>Actual pump depth (we estimate based on standard practice)</li>
+                <li>Recent well work or pump adjustments</li>
+                <li>Your actual water usage patterns</li>
+                <li>Nearby wells that might affect your water level</li>
+                <li>Local geological variations</li>
+            </ul>
+            <p><strong>This is why professional assessment is recommended for high-risk wells.</strong> A well technician 
+            can measure your actual current water level, verify pump depth, and provide well-specific guidance.</p>
+        </div>
+    </div>
+</div>
                 
                 <div class="info-section">
                     <h3>Warning Signs to Watch For</h3>
@@ -1426,7 +1561,16 @@ def generate_well_report_from_template(row, template_str):
         'yield_explanation': get_yield_explanation(safe_get(row, 'YIELD')),
         'drought_explanation': get_drought_explanation(safe_get(row, 'drought_drawdown_m')),
         'buffer_display': format_number(row.get('buffer_m'), ' meters'),
-        'technical_summary': get_technical_summary(row)
+        'technical_summary': get_technical_summary(row),
+        # NEW VARIABLES FOR DETAILED CALCULATION
+        'depth_display': format_number(row.get('DEPTH_M'), ' meters'),
+        'pump_depth_display': format_number(row.get('pump_depth_m'), ' meters'),
+        'static_level_display': format_number(row.get('current_water_level_m_observed'), ' meters'),
+        'drought_stress_display': format_number(row.get('drought_drawdown_m'), ' meters'),
+        'stressed_level_display': format_number(row.get('stressed_water_level_m'), ' meters'),
+        'drought_status': drought_level,
+        'yield_display': format_number(row.get('YIELD_LMIN'), ' L/min'),
+        'aquifer_display': safe_get(row, 'aquifer_type', 'Unknown')
     }
     
     # Use Template for safe substitution

@@ -58,65 +58,245 @@
         }
         
         function renderWellReport(well) {
-            const riskColor = getRiskColor(well.drying_risk);
-            
-            document.getElementById('reportContent').innerHTML = `
-                <header class="text-center mb-4">
-                    <h1>Well Risk Assessment Report</h1>
-                    <h2>Well ID: ${wellId}</h2>
-                    <p class="text-muted">Generated: ${new Date().toLocaleString()}</p>
-                </header>
+		const riskColor = getRiskColor(well.drying_risk);
+		
+		document.getElementById('reportContent').innerHTML = `
+			<header class="text-center mb-4">
+				<h1>Well Risk Assessment Report</h1>
+				<h2>Well ID: ${wellId}</h2>
+				<p class="text-muted">Generated: ${new Date().toLocaleString()}</p>
+			</header>
+			
+			<div class="info-section alert" style="border-left-color: ${riskColor}">
+				<div class="risk-header" style="color: ${riskColor}">
+					<h3>Your Well's Risk Status</h3>
+				</div>
+				<div class="key-finding" style="color: ${riskColor}">${well.drying_risk || 'Unknown'}</div>
+				<div class="explanation">
+					${getRiskExplanation(well.drying_risk)}
+				</div>
+			</div>
+			
+			<div class="info-section">
+				<h3>What This Means for You</h3>
+				<div class="explanation">
+					${getRiskRecommendations(well.drying_risk)}
+				</div>
+			</div>
+			
+			<div class="info-section">
+				<h3>About Your Well</h3>
+				<div class="explanation">
+					<p><strong>Location:</strong> ${well.location_display || 'Unknown'}</p>
+					<h4>Water Source</h4>
+					<p>${getAquiferExplanation(well.aquifer_type)}</p>
+					<h4>Well Capacity</h4>
+					<p>${getYieldExplanation(well.YIELD_LMIN)}</p>
+					<h4>Current Conditions Assessment</h4>
+					<p>${getDroughtExplanation(well.drought_drawdown_m)}</p>
+				</div>
+			</div>
+			
+			<div class="info-section">
+				<h3>Understanding Your Well's Safety Buffer Calculation</h3>
+				<div class="explanation">
+					<p>Your well's <strong>safety buffer</strong> is the most important number in this report. It tells you how much 
+					margin you have before your pump runs dry. Here's exactly how we calculated it for your well:</p>
+					
+					<h4>The Calculation (Step by Step)</h4>
+					<p><strong>Your Safety Buffer = Pump Depth - Stressed Water Level</strong></p>
+					
+					<div class="tech-details" style="background: #f0f8ff; padding: 15px; margin: 15px 0; border-radius: 5px;">
+						<p><strong>For your well specifically:</strong></p>
+						<ul>
+							<li><strong>Total Well Depth:</strong> ${formatNumber(well.DEPTH, 'ft')} (${formatNumber(well.DEPTH_M, 'm')})
+								<br><em>This is how deep your well was drilled into the ground.</em></li>
+							
+							<li><strong>Estimated Pump Depth:</strong> ${formatNumber(well.pump_depth_m * 3.28084, 'ft')} (${formatNumber(well.pump_depth_m, 'm')})
+								<br><em>We estimate your pump sits at 80% of total depth, or 2.5m (8.2ft) from the bottom (whichever is shallower). 
+								This is standard practice to prevent the pump from drawing sediment from the bottom.</em></li>
+							
+							<li><strong>Original Static Water Level:</strong> ${formatNumber(well.STATIC_WATER_LEVEL, 'ft')} (${formatNumber(well.current_water_level_m_observed, 'm')})
+								<br><em>This was the depth to water when your well was first drilled or last measured.</em></li>
+							
+							<li><strong>Drought Stress Applied:</strong> ${formatNumber(well.drought_drawdown_m * 3.28084, 'ft')} (${formatNumber(well.drought_drawdown_m, 'm')})
+								<br><em>Based on current conditions in regional rivers and streams, we added this amount to simulate 
+								how low your water level might drop during continued dry conditions.</em></li>
+							
+							<li><strong>Stressed Water Level:</strong> ${formatNumber(well.stressed_water_level_m * 3.28084, 'ft')} (${formatNumber(well.stressed_water_level_m, 'm')})
+								<br><em>Original water level + drought stress = worst-case water depth</em></li>
+							
+							<li><strong>Your Safety Buffer:</strong> <span style="color: ${riskColor}; font-weight: bold;">${formatNumber(well.buffer_m * 3.28084, 'ft')} (${formatNumber(well.buffer_m, 'm')})</span>
+								<br><em>Pump depth minus stressed water level = ${formatNumber(well.buffer_m, 'm')} margin</em></li>
+						</ul>
+					</div>
+					
+					<h4>What the Safety Buffer Means</h4>
+					<ul>
+						<li><strong>Positive numbers are good</strong> - Water is above your pump by this amount</li>
+						<li><strong>Numbers near zero (0-2m) are concerning</strong> - Very little margin for error</li>
+						<li><strong>Negative numbers are critical</strong> - Your pump may already be above the water level</li>
+					</ul>
+					
+					<h4>Why This Number Matters</h4>
+					<p>Think of your well like a straw in a glass of water. If the water level drops below the bottom of your 
+					straw (pump), you'll suck air instead of water. The safety buffer tells you how much room you have before 
+					that happens. A larger buffer means you're safer during droughts and high-usage periods.</p>
+				</div>
+			</div>
+        
+        <div class="info-section">
+            <h3>All Factors That Determine Your Risk Level</h3>
+            <div class="explanation">
+                <p>Your well's risk rating isn't based on just one factor - it's a comprehensive assessment. Here are 
+                all the factors we considered:</p>
                 
-                <div class="info-section alert" style="border-left-color: ${riskColor}">
-                    <div class="risk-header" style="color: ${riskColor}">
-                        <h3>Your Well's Risk Status</h3>
-                    </div>
-                    <div class="key-finding" style="color: ${riskColor}">${well.drying_risk || 'Unknown'}</div>
-                    <div class="explanation">
-                        ${getRiskExplanation(well.drying_risk)}
-                    </div>
+                <h4>1. Safety Buffer (Primary Factor)</h4>
+                <div style="margin-left: 20px;">
+                    <p><strong>Your buffer: ${formatNumber(well.buffer_m, 'm')}</strong></p>
+                    <p>This is the single most important factor. The risk categories are:</p>
+                    <ul>
+                        <li><strong>CRITICAL:</strong> Buffer less than 0m (pump may be dry)</li>
+                        <li><strong>HIGH RISK:</strong> Buffer 0-2m (very little margin)</li>
+                        <li><strong>MODERATE RISK:</strong> Buffer 2-5m (some margin, monitor closely)</li>
+                        <li><strong>LOW RISK:</strong> Buffer greater than 5m (good margin)</li>
+                    </ul>
                 </div>
                 
-                <div class="info-section">
-                    <h3>What This Means for You</h3>
-                    <div class="explanation">
-                        ${getRiskRecommendations(well.drying_risk)}
-                    </div>
+                <h4>2. Regional Drought Conditions</h4>
+                <div style="margin-left: 20px;">
+                    <p><strong>Drought stress applied: ${formatNumber(well.drought_drawdown_m, 'm')}</strong></p>
+                    <p>We monitor three major river systems across Colchester County:</p>
+                    <ul>
+                        <li>Salmon River near Truro (central region)</li>
+                        <li>Economy River near Economy (north coast)</li>
+                        <li>Great Village River at Great Village (north-central)</li>
+                    </ul>
+                    <p>When these rivers show critically low flows, it indicates regional groundwater stress. We apply 
+                    additional drawdown to your well calculation based on how many stations are in critical condition:</p>
+                    <ul>
+                        <li><strong>SEVERE:</strong> 67%+ of stations critical → 4.0m additional stress</li>
+                        <li><strong>MODERATE:</strong> 33-66% of stations critical → 3.0m additional stress</li>
+                        <li><strong>NORMAL:</strong> Less than 33% critical → 2.0m standard stress</li>
+                    </ul>
                 </div>
                 
-                <div class="info-section">
-                    <h3>About Your Well</h3>
-                    <div class="explanation">
-                        <p><strong>Location:</strong> ${well.location_display || 'Unknown'}</p>
-                        <h4>Water Source</h4>
-                        <p>${getAquiferExplanation(well.aquifer_type)}</p>
-                        <h4>Well Capacity</h4>
-                        <p>${getYieldExplanation(well.YIELD)}</p>
-                        <h4>Current Conditions Assessment</h4>
-                        <p>${getDroughtExplanation(well.drought_drawdown_m)}</p>
-                    </div>
+                <h4>3. Well Yield (Flow Rate)</h4>
+					<div style="margin-left: 20px;">
+						<p><strong>Your well's yield: ${formatNumber(well.YIELD_LMIN / 3.78541, ' GPM')} (${formatNumber(well.YIELD_LMIN, ' L/min')})</strong></p>
+                    <ul>
+                        <li>Recover more slowly after heavy use</li>
+                        <li>Are more sensitive to water level drops</li>
+                        <li>Have less capacity to meet household demands</li>
+                    </ul>
+                    <p>If your well has low yield AND moderate buffer, we upgrade the risk to "High" as a precaution.</p>
                 </div>
                 
-                <div class="info-section">
-                    <h3>Understanding Your Well's Safety Margin</h3>
-                    <div class="explanation">
-                        <p>Think of your well like a straw in a glass of water. The <strong>safety margin</strong> (or "buffer") 
-                        is how much water is above the bottom of your straw (pump). If the water level drops below your straw, 
-                        you'll suck air instead of water.</p>
-                        
-                        <p><strong>Your current safety margin: ${formatNumber(well.buffer_m, 'm')}</strong></p>
-                        
-                        <ul>
-                            <li><strong>Positive numbers are good</strong> - You have water above your pump</li>
-                            <li><strong>Numbers near zero are concerning</strong> - Your pump is close to the water surface</li>
-                            <li><strong>Negative numbers are critical</strong> - Your pump may be above the water level</li>
-                        </ul>
-                    </div>
+                <h4>4. Aquifer Type</h4>
+                <div style="margin-left: 20px;">
+                    <p><strong>Your aquifer: ${well.aquifer_type || 'Unknown'}</strong></p>
+                    <p><strong>Bedrock aquifers</strong> store water in rock fractures. They can be very reliable but:</p>
+                    <ul>
+                        <li>May show more seasonal variation</li>
+                        <li>Take longer to recover after drawdown</li>
+                        <li>Are more sensitive to drought conditions</li>
+                    </ul>
+                    <p><strong>Surficial aquifers</strong> store water in soil and sand layers. They:</p>
+                    <ul>
+                        <li>Often recharge more quickly from rainfall</li>
+                        <li>May be more variable between wet and dry seasons</li>
+                        <li>Can be affected by nearby water use</li>
+                    </ul>
                 </div>
                 
-                ${getTechnicalSummary(well)}
-            `;
-        }
+                <h4>5. Well Depth and Construction</h4>
+                <div style="margin-left: 20px;">
+                    <p><strong>Your well depth: ${formatNumber(well.DEPTH_M, 'm')}</strong></p>
+                    <p>Deeper wells generally have advantages:</p>
+                    <ul>
+                        <li>Access water from multiple aquifer zones</li>
+                        <li>More total water storage capacity</li>
+                        <li>Less affected by seasonal surface water changes</li>
+                    </ul>
+                    <p>However, if the pump can't be lowered further (due to well construction or depth), even a deep 
+                    well can run dry if water levels drop.</p>
+                </div>
+                
+                <h4>6. Data Quality and Uncertainty</h4>
+                <div style="margin-left: 20px;">
+                    <p>We use historical well construction records, which may be:</p>
+                    <ul>
+                        <li>Several years or decades old</li>
+                        <li>Based on initial drilling conditions (water levels may have changed)</li>
+                        <li>Subject to measurement variations or data entry issues</li>
+                    </ul>
+                    <p>This is why we apply conservative drought stress testing - to account for uncertainty and 
+                    provide a margin of safety in our risk assessment.</p>
+                </div>
+                
+                <h4>Important Limitations</h4>
+                <div style="background: #fff3cd; padding: 10px; border-radius: 5px; border-left: 4px solid #ffc107;">
+                    <p><strong>What we DON'T know about your specific well:</strong></p>
+                    <ul>
+                        <li>Exact current water level (we use historical data + drought modeling)</li>
+                        <li>Actual pump depth (we estimate based on standard practice)</li>
+                        <li>Recent well work or pump adjustments</li>
+                        <li>Your actual water usage patterns</li>
+                        <li>Nearby wells that might affect your water level</li>
+                        <li>Local geological variations</li>
+                    </ul>
+                    <p><strong>This is why professional assessment is recommended for high-risk wells.</strong> A well technician 
+                    can measure your actual current water level, verify pump depth, and provide well-specific guidance.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="info-section">
+            <h3>Warning Signs to Watch For</h3>
+            <div class="explanation">
+                <p>Contact a well professional if you notice any of these signs:</p>
+                <ul>
+                    <li><strong>Reduced water pressure</strong> in your taps or shower</li>
+                    <li><strong>Pump running more frequently</strong> or for longer periods</li>
+                    <li><strong>Air spitting from faucets</strong> when you first turn them on</li>
+                    <li><strong>Pump making unusual noises</strong> or cycling on and off rapidly</li>
+                    <li><strong>Cloudy or muddy water</strong> (could indicate low water levels)</li>
+                    <li><strong>Complete loss of water</strong> - turn off your pump immediately</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="info-section">
+            <h3>Water Conservation Tips</h3>
+            <div class="explanation">
+                <h4>High-Impact Actions:</h4>
+                <ul>
+                    <li><strong>Fix leaks immediately</strong> - A dripping tap can waste thousands of liters per year</li>
+                    <li><strong>Install low-flow fixtures</strong> - Showerheads, toilets, and faucet aerators</li>
+                    <li><strong>Run full loads</strong> - Only run dishwasher and washing machine when full</li>
+                    <li><strong>Take shorter showers</strong> - Even 2 minutes less makes a big difference</li>
+                </ul>
+                
+                <h4>During Dry Periods:</h4>
+                <ul>
+                    <li><strong>Space out water usage</strong> - Don't run multiple appliances at once</li>
+                    <li><strong>Collect rainwater</strong> for gardens and outdoor use</li>
+                    <li><strong>Limit lawn watering</strong> - Grass will recover, wells may not</li>
+                </ul>
+            </div>
+        </div>
+        
+        ${getTechnicalSummary(well)}
+        
+        <div class="info-section">
+            <h3>About This Analysis</h3>
+            <div class="explanation">
+                <p>This report is based on provincial well records, regional drought monitoring, and engineering estimates. 
+                For definitive assessment, consult with a qualified well professional.</p>
+            </div>
+        </div>
+    `;
+}
         
         function getRiskColor(risk) {
             if (!risk) return '#9e9e9e';
@@ -163,15 +343,26 @@
         }
         
         function getTechnicalSummary(well) {
-            return `
-                <div class="tech-details">
-                    <h4>Technical Details</h4>
-                    <p><strong>Well Depth:</strong> ${formatNumber(well.DEPTH, 'm')}</p>
-                    <p><strong>Static Water Level:</strong> ${formatNumber(well.STATIC_WATER_LEVEL, 'm')}</p>
-                    <p><strong>Buffer:</strong> ${formatNumber(well.buffer_m, 'm')}</p>
-                </div>
-            `;
-        }
+			return `
+				<div class="tech-details">
+					<h4>Technical Details (for reference)</h4>
+					<div class="row">
+						<div class="col-md-6">
+							<p><strong>Total Well Depth:</strong> ${formatNumber(well.DEPTH, 'ft')} / ${formatNumber(well.DEPTH_M, 'm')}</p>
+							<p><strong>Original Static Water Level:</strong> ${formatNumber(well.STATIC_WATER_LEVEL, 'ft')} / ${formatNumber(well.current_water_level_m_observed, 'm')}</p>
+							<p><strong>Stressed Water Level:</strong> ${formatNumber(well.stressed_water_level_m * 3.28084, 'ft')} / ${formatNumber(well.stressed_water_level_m, 'm')}</p>
+						</div>
+						<div class="col-md-6">
+							<p><strong>Estimated Pump Depth:</strong> ${formatNumber(well.pump_depth_m * 3.28084, 'ft')} / ${formatNumber(well.pump_depth_m, 'm')}</p>
+							<p><strong>Safety Buffer:</strong> ${formatNumber(well.buffer_m * 3.28084, 'ft')} / ${formatNumber(well.buffer_m, 'm')}</p>
+							<p><strong>Drought Stress Applied:</strong> ${formatNumber(well.drought_drawdown_m * 3.28084, 'ft')} / ${formatNumber(well.drought_drawdown_m, 'm')}</p>
+							<p><strong>Well Yield:</strong> ${formatNumber(well.YIELD_LMIN / 3.78541, ' GPM')} / ${formatNumber(well.YIELD_LMIN, ' L/min')}</p>
+						</div>
+					</div>
+					<p><em>Note: Water levels are measured as depth below ground surface. Larger numbers mean deeper water.</em></p>
+				</div>
+			`;
+}
     </script>
 </body>
 </html>
