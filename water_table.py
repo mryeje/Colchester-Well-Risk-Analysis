@@ -2346,11 +2346,7 @@ const mapCenter = [{map_center_lat}, {map_center_lng}];
 # DataTables and Map initialization script
 html_parts.append("""
 <script>
-let map = null;
-let markersLayer = null;
-let clusterGroup = null;
-let allMapData = [];
-let currentTable = null;
+
 
 function findColumnIndex(columnName) {
     for (let i = 0; i < dtColumns.length; i++) {
@@ -2370,6 +2366,9 @@ $(document).ready(function() {
         return response.json();
     })
     .then(allWellsData => {
+        // STORE ORIGINAL DATA BEFORE ANY MODIFICATIONS
+        originalMetricData = JSON.parse(JSON.stringify(allWellsData));
+        
         currentTable = $('#all_wells_table').DataTable({
             data: allWellsData,
             columns: dtColumns,
@@ -2523,17 +2522,37 @@ function loadMapMarkers(filterCritical = false) {
     let markersAdded = 0;
     filteredData.forEach(well => {
         try {
-            // INCREASED RADIUS FROM 6 TO 8 (33% larger, which appears as 20%+ larger visually)
+            // MUCH LARGER MARKERS FOR MOBILE - radius 12 (was 6)
             const marker = L.circleMarker([well.lat, well.lng], {
-                radius: 8,  // Changed from 6
+                radius: 12,  // Doubled from original 6
                 fillColor: well.color,
                 color: '#000',
-                weight: 1,
+                weight: 2,  // Slightly thicker border for visibility
                 opacity: 1,
-                fillOpacity: 0.8
-            }).bindPopup(well.popup);
+                fillOpacity: 0.7,  // Slightly more transparent so overlaps are visible
+                // Add buffer zone for easier clicking
+                bubblingMouseEvents: true
+            }).bindPopup(well.popup, {
+                maxWidth: 300,
+                className: 'well-popup'  // For custom styling if needed
+            });
             
             marker.wellId = well.well_id;
+            
+            // Make the entire marker area more clickable
+            marker.on('mouseover', function() {
+                this.setStyle({
+                    radius: 14,  // Slightly larger on hover
+                    fillOpacity: 0.9
+                });
+            });
+            
+            marker.on('mouseout', function() {
+                this.setStyle({
+                    radius: 12,
+                    fillOpacity: 0.7
+                });
+            });
             
             clusterGroup.addLayer(marker);
             markersLayer.addLayer(marker);
@@ -2596,31 +2615,14 @@ function highlightWellOnMap(wellId) {
     });
 }
 
+
+let map = null;
+let markersLayer = null;
+let clusterGroup = null;
+let allMapData = [];
+let currentTable = null;
 let currentUnits = 'metric';
 let originalMetricData = null;
-
-// Store original data when table loads
-$(document).ready(function() {
-  fetch(dataJsonFile)
-    .then(response => response.json())
-    .then(allWellsData => {
-        // STORE ORIGINAL DATA BEFORE ANY MODIFICATIONS
-        originalMetricData = JSON.parse(JSON.stringify(allWellsData));
-        
-        currentTable = $('#all_wells_table').DataTable({
-            data: allWellsData,
-            columns: dtColumns,
-            pageLength: 25,
-            lengthMenu: [10, 25, 50, 100, {label: "All", value: -1}],
-            dom: 'Bfrtip',
-            buttons: ['copy', 'csv', 'excel', 'print'],
-            scrollX: true,
-            responsive: true,
-            order: [[findColumnIndex('buffer_m'), 'asc']]
-        });
-        // ... rest of your table initialization
-    });
-});
 
 function toggleUnits() {
     if (!currentTable || !originalMetricData) {
