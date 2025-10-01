@@ -1765,6 +1765,7 @@ def prepare_map_data(wells_df, max_points=5000):
             risk_priority = 3
         
         # Create popup content with safe value handling
+        # Create popup content with safe value handling
         def safe_format(value, format_str="{}", default="N/A"):
             try:
                 if pd.isna(value) or value == "nan":
@@ -1772,18 +1773,26 @@ def prepare_map_data(wells_df, max_points=5000):
                 return format_str.format(value)
             except:
                 return default
-        
+
+        # Clean well ID for the link
+        clean_well_id = str(well.get('WELL_ID', '')).strip()
+        clean_well_id = re.sub(r'<[^>]+>', '', clean_well_id)  # Remove any HTML tags
+        clean_well_id = re.sub(r'[<>:"/\\|?*]', '_', clean_well_id)  # Clean for URL
+
         popup_content = f"""
-        <div style="width: 250px;">
+        <div style="width: 280px;">
             <strong>Well ID:</strong> {safe_format(well.get('WELL_ID'))}<br>
             <strong>Location:</strong> {safe_format(well.get('location_display'), default='Unknown')}<br>
             <strong>Risk Level:</strong> <span style="color: {color}; font-weight: bold;">{safe_format(well.get('drying_risk'), default='Unknown')}</span><br>
             <strong>Buffer:</strong> {safe_format(well.get('buffer_m'), '{:.1f}m')}<br>
-            <strong>Well Depth:</strong> {safe_format(well.get('DEPTH'), '{}m')}<br>
+            <strong>Well Depth:</strong> {safe_format(well.get('DEPTH_M'), '{:.1f}m')}<br>
             <strong>Aquifer:</strong> {safe_format(well.get('aquifer_type'), default='Unknown')}<br>
-            <strong>Yield:</strong> {safe_format(well.get('YIELD'), '{} L/min')}<br>
+            <strong>Yield:</strong> {safe_format(well.get('YIELD_LMIN'), '{:.1f} L/min')}<br>
             <strong>Drought Stress:</strong> {safe_format(well.get('drought_drawdown_m'), '{:.1f}m')}<br>
-            <strong>Coordinates:</strong> {well['latitude']:.4f}, {well['longitude']:.4f}<br>
+            <hr style="margin: 8px 0;">
+            <a href="well_report_template.html?id={clean_well_id}" target="_blank" style="color: #0b4d78; text-decoration: none; font-weight: bold;">
+                📊 View Full Report →
+            </a>
         </div>
         """
         
@@ -2514,8 +2523,9 @@ function loadMapMarkers(filterCritical = false) {
     let markersAdded = 0;
     filteredData.forEach(well => {
         try {
+            // INCREASED RADIUS FROM 6 TO 8 (33% larger, which appears as 20%+ larger visually)
             const marker = L.circleMarker([well.lat, well.lng], {
-                radius: 6,
+                radius: 8,  // Changed from 6
                 fillColor: well.color,
                 color: '#000',
                 weight: 1,

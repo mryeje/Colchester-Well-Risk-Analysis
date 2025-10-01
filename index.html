@@ -162,10 +162,10 @@ table.dataTable td .well-link:hover {{
 <div class="container-fluid py-4">
 
 <h1 class='mb-3'>Colchester County Well Drying Risk Dashboard</h1>
-<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-30 22:57 | Wells mapped: 5000</p>
+<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-30 23:27 | Wells mapped: 5000</p>
 
-<div class="drought-status drought-default">
-    <strong>Regional Drought Status:</strong> ℹ️ HYDROMETRIC DATA UNAVAILABLE - Conservative drought assumptions applied
+<div class="drought-status drought-severe">
+    <strong>Regional Drought Status:</strong> 🚨 SEVERE DROUGHT CONDITIONS - 67%+ of monitoring stations show critical low flows
 </div>
 
 
@@ -223,9 +223,9 @@ table.dataTable td .well-link:hover {{
 
 <div class="row">
   <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">9013</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">1499</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">80</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">9.76</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">1567</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">76</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">7.76</div></div></div>
 </div>
 
 
@@ -260,23 +260,23 @@ table.dataTable td .well-link:hover {{
     </tr>
     <tr>
       <td>Low risk - &gt;5m buffer</td>
-      <td>1905</td>
+      <td>1845</td>
     </tr>
     <tr>
       <td>CRITICAL - Well may be dry</td>
-      <td>1499</td>
+      <td>1567</td>
     </tr>
     <tr>
       <td>Moderate risk - 2-5m buffer</td>
-      <td>70</td>
+      <td>66</td>
     </tr>
     <tr>
       <td>High risk - &lt;2m buffer</td>
-      <td>68</td>
+      <td>63</td>
     </tr>
     <tr>
       <td>High risk - Low yield well</td>
-      <td>12</td>
+      <td>13</td>
     </tr>
   </tbody>
 </table>
@@ -306,20 +306,20 @@ table.dataTable td .well-link:hover {{
   <tbody>
     <tr>
       <th>Bedrock</th>
-      <td>1006</td>
-      <td>34</td>
-      <td>6</td>
-      <td>1520</td>
-      <td>41</td>
+      <td>1040</td>
+      <td>36</td>
+      <td>8</td>
+      <td>1485</td>
+      <td>38</td>
       <td>4211</td>
     </tr>
     <tr>
       <th>Surficial</th>
-      <td>488</td>
-      <td>34</td>
-      <td>6</td>
-      <td>372</td>
-      <td>27</td>
+      <td>522</td>
+      <td>25</td>
+      <td>5</td>
+      <td>349</td>
+      <td>26</td>
       <td>1162</td>
     </tr>
   </tbody>
@@ -378,7 +378,7 @@ table.dataTable td .well-link:hover {{
 const dtColumns = [{"data": "WELL_ID", "title": "Well ID"}, {"data": "location_display", "title": "Location"}, {"data": "Map Link", "title": "Map"}, {"data": "DEPTH", "title": "Well Depth"}, {"data": "DEPTH_M", "title": "Well Depth"}, {"data": "STATIC_WATER_LEVEL", "title": "Static Water Level"}, {"data": "current_water_level_m_observed", "title": "Current Water Level"}, {"data": "drought_drawdown_m", "title": "Drought Stress"}, {"data": "stressed_water_level_m", "title": "Stressed Water Level"}, {"data": "pump_depth_m", "title": "Pump Depth"}, {"data": "buffer_m", "title": "Safety Buffer"}, {"data": "drying_risk", "title": "Risk Level"}, {"data": "YIELD", "title": "Yield"}, {"data": "YIELD_LMIN", "title": "Yield"}, {"data": "yield_category", "title": "Yield Category"}, {"data": "aquifer_type", "title": "Aquifer Type"}]; 
 const dataJsonFile = 'wells_data.json';
 const mapDataFile = 'wells_map_data.json';
-const mapCenter = [45.39156316147548, -63.378117111795675];
+const mapCenter = [45.38992727747837, -63.380214811885565];
 </script>
 
 <script>
@@ -559,8 +559,9 @@ function loadMapMarkers(filterCritical = false) {
     let markersAdded = 0;
     filteredData.forEach(well => {
         try {
+            // INCREASED RADIUS FROM 6 TO 8 (33% larger, which appears as 20%+ larger visually)
             const marker = L.circleMarker([well.lat, well.lng], {
-                radius: 6,
+                radius: 8,  // Changed from 6
                 fillColor: well.color,
                 color: '#000',
                 weight: 1,
