@@ -12,6 +12,7 @@ import os
 import pathlib
 import io
 import re
+import fiona
 warnings.filterwarnings('ignore')
 
 print("=== COLCHESTER WELL DRYING RISK ANALYSIS ===")
@@ -199,6 +200,27 @@ for col in key_coords:
 # ---------------------------
 # PATCH 1: IMPROVED COLCHESTER COUNTY FILTERING
 
+# RIGHT BEFORE "# Method 1: Check COUNTY column"
+print("\n=== DEBUGGING WELL 981217 ===")
+test_id = "981217"
+if "WELLNUMBER" in wells.columns:
+    test_well = wells[wells["WELLNUMBER"].astype(str) == test_id]
+    if not test_well.empty:
+        print(f"Well {test_id} found in dataset before filtering")
+        for col in ["COUNTY", "MUNICIPALITY", "CIVIC_ADDRESS", "ADDRESS", "LOCATION"]:
+            if col in wells.columns:
+                val = test_well[col].values[0]
+                print(f"  {col}: '{val}'")
+                # Check if it matches any place
+                if pd.notna(val):
+                    matches = [place for place in colchester_places 
+                              if place in str(val).lower()]
+                    if matches:
+                        print(f"    ✓ Matches: {matches}")
+    else:
+        print(f"Well {test_id} NOT in dataset before filtering!")
+
+
 # Define all Colchester County municipalities and communities
 colchester_places = {
     # Incorporated Municipalities
@@ -220,7 +242,7 @@ colchester_places = {
     'kemptown', 'bayhead', 'brule', 'gays river', 'green oaks', 'beaver brook',
     'old barns', 'truro heights', 'oliver', 'west new annan', 'central new annan',
     'the falls', 'balmoral mills', 'east earltown', 'green creek', 'eastville',
-    'north river', 'nuttby', 'earltown', 'denmark', 'newton mills',
+    'north river', 'nuttby', 'earltown', 'denmark', 'newton mills', 'LAKE ROAD,MATTATALL LAKE',
     'upper onslow', 'onslow mountain', 'mccallum settlement', 'upper north river',
     'central north river', 'upper brookside', 'upper kemptown', 'riversdale',
     
@@ -230,100 +252,208 @@ colchester_places = {
     'east village', 'french river', 'greenfield', 'harmony', 'lanesville',
     'londonderry', 'lornevale', 'lynn', 'montrose', 'pleasant hills', 'princeport',
     'salmon river', 'sand point', 'south branch', 'union', 'valley', 
-    'west st. andrews', 'wittenburg'
+    'west st. andrews', 'wittenburg', 'mattatall lake', 'wallace highlands'
 }
 
-print(f"Total wells before filtering: {len(wells)}")
+# ---------------------------
+# GEOGRAPHIC BOUNDARY FILTERING WITH CUSTOM POLYGON
+# ---------------------------
 
-# Try multiple filtering approaches
-filtered_wells = None
-filter_method = "none"
+print("\n=== GEOGRAPHIC FILTERING FOR COLCHESTER COUNTY ===")
 
-# Method 1: Check COUNTY column
-if "COUNTY" in wells.columns:
-    county_mask = wells["COUNTY"].astype(str).str.contains("colchester", case=False, na=False)
-    if county_mask.any():
-        filtered_wells = wells[county_mask].copy()
-        filter_method = "COUNTY column"
-        print(f"Found {county_mask.sum()} wells using COUNTY column filter")
+# Define exclusion patterns for known non-Colchester locations
+EXCLUDE_PLACES = {
+    'herring cove', 'halifax', 'dartmouth', 'hrm', 'sackville', 'bedford',
+    'prospect', 'beaver bank', 'fall river', 'lower sackville', 'hammonds plains',
+    'antigonish', 'pictou', 'new glasgow', 'stellarton', 'cape breton',
+    'yarmouth', 'digby', 'annapolis', 'lunenburg', 'shelburne', 'queens',
+    'hants', 'windsor', 'kentville', 'wolfville', 'kings county', 'cumberland',
+    'amherst', 'springhill', 'parrsboro', 'porters lake', 'peggys cove',
+    'peggy cove', 'wilkie cove', 'acacia valley', 'musquodoboit', 'sheet harbour',
+    'lake echo', 'lawrencetown', 'eastern passage', 'cow bay'
+}
 
-# Method 2: Check MUNICIPALITY column  
-if filtered_wells is None and "MUNICIPALITY" in wells.columns:
-    muni_mask = pd.Series([False] * len(wells))
-    for place in colchester_places:
-        place_mask = wells["MUNICIPALITY"].astype(str).str.contains(place, case=False, na=False)
-        muni_mask = muni_mask | place_mask
-    
-    if muni_mask.any():
-        filtered_wells = wells[muni_mask].copy()
-        filter_method = "MUNICIPALITY column"
-        print(f"Found {muni_mask.sum()} wells using MUNICIPALITY column filter")
+# Tighter Colchester County bounding box (fallback)
+COLCHESTER_BOUNDS = {
+    'lat_min': 45.25,
+    'lat_max': 45.60,
+    'lng_min': -63.75,
+    'lng_max': -63.15
+}
 
-# Method 3: Check CIVIC_ADDRESS or ADDRESS for Colchester places
-if filtered_wells is None:
-    for addr_col in ["CIVIC_ADDRESS", "ADDRESS", "LOCATION"]:
-        if addr_col in wells.columns:
-            addr_mask = pd.Series([False] * len(wells))
-            for place in colchester_places:
-                place_mask = wells[addr_col].astype(str).str.contains(place, case=False, na=False)
-                addr_mask = addr_mask | place_mask
-            
-            if addr_mask.any():
-                filtered_wells = wells[addr_mask].copy()
-                filter_method = f"{addr_col} column"
-                print(f"Found {addr_mask.sum()} wells using {addr_col} filter")
-                break
+COLCHESTER_UTM_BOUNDS = {
+    'x_min': 420000,
+    'x_max': 560000,
+    'y_min': 5010000,
+    'y_max': 5065000
+}
 
-# Method 4: Manual exclusion of obvious non-Colchester places
-if filtered_wells is None:
-    print("No direct Colchester filtering worked. Attempting exclusion filter...")
-    
-    # Known non-Colchester places that appeared in your JSON
-    exclude_places = [
-        'halls harbour', 'beaver bank', 'hrm', 'halifax', 'havre boucher', 
-        'prospect bay', 'antigonish', 'kings county', 'halifax county',
-        'pictou', 'cumberland', 'hants', 'digby', 'yarmouth', 'shelburne',
-        'queens', 'lunenburg', 'annapolis', 'cape breton'
-    ]
-    
-    exclude_mask = pd.Series([False] * len(wells))
-    for addr_col in ["CIVIC_ADDRESS", "ADDRESS", "LOCATION", "MUNICIPALITY"]:
-        if addr_col in wells.columns:
-            for exclude_place in exclude_places:
-                exclude_place_mask = wells[addr_col].astype(str).str.contains(exclude_place, case=False, na=False)
-                exclude_mask = exclude_mask | exclude_place_mask
-    
-    if exclude_mask.any():
-        filtered_wells = wells[~exclude_mask].copy()
-        filter_method = "exclusion filter"
-        print(f"Excluded {exclude_mask.sum()} wells from known non-Colchester locations")
+# Try to load custom boundary polygon
+CUSTOM_BOUNDARY_FILE = "colchester_boundary.kml"
+use_custom_boundary = False
+colchester_boundary = None
 
-# Apply the filter
-if filtered_wells is not None:
-    wells = filtered_wells
-    print(f"Successfully filtered using {filter_method}: {len(wells)} wells remain")
-    
-    # Show what places were found
-    if "MUNICIPALITY" in wells.columns:
-        print("Top municipalities found:")
-        print(wells["MUNICIPALITY"].value_counts().head(10))
-    elif "CIVIC_ADDRESS" in wells.columns:
-        print("Sample addresses found:")
-        sample_addresses = wells["CIVIC_ADDRESS"].dropna().head(10).tolist()
-        for addr in sample_addresses:
-            print(f"  - {addr}")
+try:
+    if os.path.exists(CUSTOM_BOUNDARY_FILE):
+        colchester_boundary = gpd.read_file(CUSTOM_BOUNDARY_FILE)
         
-else:
-    print("WARNING: Could not filter to Colchester County wells!")
-    print("Available columns:", wells.columns.tolist())
+        if colchester_boundary.empty:
+            print(f"Warning: {CUSTOM_BOUNDARY_FILE} is empty")
+        else:
+            colchester_boundary = colchester_boundary.to_crs(wgs84)
+            use_custom_boundary = True
+            print(f"✅ Loaded custom boundary polygon from {CUSTOM_BOUNDARY_FILE}")
+    else:
+        print(f"Custom boundary file not found: {CUSTOM_BOUNDARY_FILE}")
+        print("Using bounding box method instead...")
+        
+except Exception as e:
+    print(f"Error loading custom boundary: {e}")
+    print("Using bounding box method instead...")
+
+# Clean up bad coordinate data
+if 'X' in wells.columns and 'Y' in wells.columns:
+    wells["X"] = pd.to_numeric(wells["X"], errors='coerce') 
+    wells["Y"] = pd.to_numeric(wells["Y"], errors='coerce')
     
-    # Show sample data to help debug
-    for col in ["COUNTY", "MUNICIPALITY", "CIVIC_ADDRESS", "ADDRESS"]:
-        if col in wells.columns:
-            print(f"\nSample {col} values:")
-            sample_values = wells[col].dropna().head(10).tolist()
-            for val in sample_values:
-                print(f"  - {val}")
+    invalid_coords = (
+        (wells['Y'] < 1000) |
+        (wells['X'] < 200000) |
+        (wells['X'] > 800000) |
+        (wells['Y'] > 5250000) |
+        (wells['Y'] < 4900000)
+    )
+    
+    if invalid_coords.any():
+        print(f"Removing {invalid_coords.sum()} wells with invalid coordinates")
+        wells.loc[invalid_coords, ['X', 'Y']] = np.nan
+
+# Process wells with coordinates
+wells_clean = wells.dropna(subset=["X", "Y"]).copy()
+
+if not wells_clean.empty and use_custom_boundary:
+    # Use custom polygon boundary
+    try:
+        wells_gdf = gpd.GeoDataFrame(
+            wells_clean,
+            geometry=gpd.points_from_xy(wells_clean["X"], wells_clean["Y"]),
+            crs=utm_crs
+        ).to_crs(wgs84)
+        
+        # Spatial join with custom boundary
+        wells_in_boundary = gpd.sjoin(
+            wells_gdf, 
+            colchester_boundary[['geometry']], 
+            how='inner', 
+            predicate='within'
+        )
+        
+        wells_in_boundary['latitude'] = wells_in_boundary.geometry.y
+        wells_in_boundary['longitude'] = wells_in_boundary.geometry.x
+        
+        # Drop the spatial join index column
+        wells_in_boundary = wells_in_boundary.drop(columns=['index_right'], errors='ignore')
+        
+        wells_with_coords = wells_in_boundary
+        print(f"✅ Custom polygon filter: Found {len(wells_with_coords)} wells within boundary")
+        
+    except Exception as e:
+        print(f"Error using custom boundary: {e}")
+        print("Falling back to bounding box...")
+        use_custom_boundary = False
+
+if not use_custom_boundary and not wells_clean.empty:
+    # Fallback to bounding box method
+    try:
+        utm_valid = (
+            wells_clean['X'].between(COLCHESTER_UTM_BOUNDS['x_min'], COLCHESTER_UTM_BOUNDS['x_max']) &
+            wells_clean['Y'].between(COLCHESTER_UTM_BOUNDS['y_min'], COLCHESTER_UTM_BOUNDS['y_max'])
+        )
+        
+        wells_clean = wells_clean[utm_valid].copy()
+        print(f"Wells with valid Colchester-area UTM coordinates: {len(wells_clean)}")
+        
+        wells_gdf_temp = gpd.GeoDataFrame(
+            wells_clean,
+            geometry=gpd.points_from_xy(wells_clean["X"], wells_clean["Y"]),
+            crs=utm_crs
+        ).to_crs(wgs84)
+        
+        wells_clean["latitude"] = wells_gdf_temp.geometry.y
+        wells_clean["longitude"] = wells_gdf_temp.geometry.x
+        
+        coord_mask = (
+            wells_clean['latitude'].between(COLCHESTER_BOUNDS['lat_min'], COLCHESTER_BOUNDS['lat_max']) &
+            wells_clean['longitude'].between(COLCHESTER_BOUNDS['lng_min'], COLCHESTER_BOUNDS['lng_max'])
+        )
+        
+        wells_with_coords = wells_clean[coord_mask].copy()
+        print(f"Bounding box filter: Found {len(wells_with_coords)} wells within Colchester bounds")
+        
+    except Exception as e:
+        print(f"Error in bounding box conversion: {e}")
+        wells_with_coords = pd.DataFrame()
+else:
+    if wells_clean.empty:
+        wells_with_coords = pd.DataFrame()
+
+# Update main dataframe with coordinates
+if not wells_with_coords.empty:
+    wells.loc[wells_with_coords.index, 'latitude'] = wells_with_coords['latitude']
+    wells.loc[wells_with_coords.index, 'longitude'] = wells_with_coords['longitude']
+
+# Text-based filtering for wells WITHOUT coordinates
+wells_without_coords = wells[~wells.index.isin(wells_with_coords.index)].copy()
+print(f"Wells without valid coordinates: {len(wells_without_coords)}")
+
+text_matches = set()
+
+if "COUNTY" in wells_without_coords.columns:
+    county_mask = wells_without_coords["COUNTY"].astype(str).str.contains("colchester", case=False, na=False)
+    text_matches.update(wells_without_coords[county_mask].index)
+    print(f"Text filter (COUNTY): Found {county_mask.sum()} additional wells")
+
+# Exclusion filter
+exclude_matches = set()
+for addr_col in ["CIVIC_ADDRESS", "ADDRESS", "LOCATION", "MUNICIPALITY", "COUNTY"]:
+    if addr_col in wells_without_coords.columns:
+        for exclude_place in EXCLUDE_PLACES:
+            exclude_mask = wells_without_coords[addr_col].astype(str).str.contains(exclude_place, case=False, na=False)
+            exclude_matches.update(wells_without_coords[exclude_mask].index)
+
+if exclude_matches:
+    print(f"Excluding {len(exclude_matches)} text-matched wells from non-Colchester locations")
+    text_matches = text_matches - exclude_matches
+
+wells_text_filtered = wells_without_coords.loc[list(text_matches)] if text_matches else pd.DataFrame()
+
+wells = pd.concat([wells_with_coords, wells_text_filtered]).drop_duplicates()
+print(f"\n=== FINAL RESULT: {len(wells)} Colchester County wells ===")
+print(f"  - From geographic filter: {len(wells_with_coords)}")
+print(f"  - From text filter: {len(wells_text_filtered)}")
+                
+# DEBUG: Check specific well 900279
+print("\n=== DEBUGGING WELL 900279 ===")
+test_well_id = "900279"
+
+# First check if WELL_ID column exists yet
+if "WELL_ID" in wells.columns:
+    test_well = wells[wells["WELL_ID"].astype(str) == test_well_id]
+    if not test_well.empty:
+        print(f"✓ Well {test_well_id} IS in filtered dataset")
+        print(f"  COUNTY: {test_well['COUNTY'].values[0] if 'COUNTY' in wells.columns else 'N/A'}")
+        print(f"  CIVIC_ADDRESS: {test_well['CIVIC_ADDRESS'].values[0] if 'CIVIC_ADDRESS' in wells.columns else 'N/A'}")
+    else:
+        print(f"✗ Well {test_well_id} was FILTERED OUT")
+elif "WELLNUMBER" in wells.columns:
+    test_well = wells[wells["WELLNUMBER"].astype(str) == test_well_id]
+    if not test_well.empty:
+        print(f"✓ Well {test_well_id} IS in filtered dataset (found via WELLNUMBER)")
+        print(f"  COUNTY: {test_well['COUNTY'].values[0] if 'COUNTY' in wells.columns else 'N/A'}")
+    else:
+        print(f"✗ Well {test_well_id} was FILTERED OUT")
+else:
+    print("Cannot check - no WELL_ID or WELLNUMBER column found yet")
 
 # ---------------------------
 # 2. Required columns check
@@ -531,7 +661,6 @@ try:
             wells["WELL_ID"] = wells.index.astype(str)
 
     # assign static level to current_water_level_m
-    
 
     # try to update from current_levels - matching as strings
     current_levels["WELL_ID"] = current_levels["WELL_ID"].astype(str)

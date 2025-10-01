@@ -156,22 +156,13 @@ table.dataTable td .well-link:hover {{
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-// Auto-open map modal if URL has #mapModal hash
-$(document).ready(function() {
-    if (window.location.hash === '#mapModal') {
-        $('#mapModal').modal('show');
-    }
-});
-</script>
-
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 </head><body>
 <div class="container-fluid py-4">
 
 <h1 class='mb-3'>Colchester County Well Drying Risk Dashboard</h1>
-<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-09-30 23:45 | Wells mapped: 5000</p>
+<p class='text-muted'>Multi-Station Hydrometric Analysis | Report generated: 2025-10-01 09:51 | Wells mapped: 5000</p>
 
 <div class="drought-status drought-severe">
     <strong>Regional Drought Status:</strong> 🚨 SEVERE DROUGHT CONDITIONS - 67%+ of monitoring stations show critical low flows
@@ -231,10 +222,10 @@ $(document).ready(function() {
 
 
 <div class="row">
-  <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">9013</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">1567</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">76</div></div></div>
-  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">7.76</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Total Wells</div><div class="kpi-value">17087</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Critical Wells</div><div class="kpi-value">2626</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>High Risk Wells</div><div class="kpi-value">115</div></div></div>
+  <div class="col-md-3"><div class="card kpi-card"><div>Avg Buffer (m)</div><div class="kpi-value">7.71</div></div></div>
 </div>
 
 
@@ -265,27 +256,27 @@ $(document).ready(function() {
   <tbody>
     <tr>
       <td>No data</td>
-      <td>5459</td>
+      <td>11280</td>
     </tr>
     <tr>
       <td>Low risk - &gt;5m buffer</td>
-      <td>1845</td>
+      <td>2926</td>
     </tr>
     <tr>
       <td>CRITICAL - Well may be dry</td>
-      <td>1567</td>
+      <td>2626</td>
     </tr>
     <tr>
       <td>Moderate risk - 2-5m buffer</td>
-      <td>66</td>
+      <td>140</td>
     </tr>
     <tr>
       <td>High risk - &lt;2m buffer</td>
-      <td>63</td>
+      <td>82</td>
     </tr>
     <tr>
       <td>High risk - Low yield well</td>
-      <td>13</td>
+      <td>33</td>
     </tr>
   </tbody>
 </table>
@@ -315,21 +306,30 @@ $(document).ready(function() {
   <tbody>
     <tr>
       <th>Bedrock</th>
-      <td>1040</td>
-      <td>36</td>
-      <td>8</td>
-      <td>1485</td>
-      <td>38</td>
-      <td>4211</td>
+      <td>1968</td>
+      <td>52</td>
+      <td>25</td>
+      <td>2429</td>
+      <td>103</td>
+      <td>9191</td>
     </tr>
     <tr>
       <th>Surficial</th>
-      <td>522</td>
-      <td>25</td>
-      <td>5</td>
-      <td>349</td>
-      <td>26</td>
-      <td>1162</td>
+      <td>624</td>
+      <td>28</td>
+      <td>8</td>
+      <td>476</td>
+      <td>33</td>
+      <td>1764</td>
+    </tr>
+    <tr>
+      <th>Unknown</th>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>8</td>
     </tr>
   </tbody>
 </table>
@@ -387,7 +387,7 @@ $(document).ready(function() {
 const dtColumns = [{"data": "WELL_ID", "title": "Well ID"}, {"data": "location_display", "title": "Location"}, {"data": "Map Link", "title": "Map"}, {"data": "DEPTH", "title": "Well Depth"}, {"data": "DEPTH_M", "title": "Well Depth"}, {"data": "STATIC_WATER_LEVEL", "title": "Static Water Level"}, {"data": "current_water_level_m_observed", "title": "Current Water Level"}, {"data": "drought_drawdown_m", "title": "Drought Stress"}, {"data": "stressed_water_level_m", "title": "Stressed Water Level"}, {"data": "pump_depth_m", "title": "Pump Depth"}, {"data": "buffer_m", "title": "Safety Buffer"}, {"data": "drying_risk", "title": "Risk Level"}, {"data": "YIELD", "title": "Yield"}, {"data": "YIELD_LMIN", "title": "Yield"}, {"data": "yield_category", "title": "Yield Category"}, {"data": "aquifer_type", "title": "Aquifer Type"}]; 
 const dataJsonFile = 'wells_data.json';
 const mapDataFile = 'wells_map_data.json';
-const mapCenter = [45.38992727747837, -63.380214811885565];
+const mapCenter = [45.458672087897625, -63.37439541245676];
 </script>
 
 <script>

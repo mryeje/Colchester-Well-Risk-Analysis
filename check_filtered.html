@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Colchester Filtering Checker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .panel {
+            border: 2px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .filtered { border-color: #4CAF50; background: #f0fff0; }
+        .not-filtered { border-color: #f44336; background: #fff0f0; }
+        h2 { margin-top: 0; }
+        .stats {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .well-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .well-id { font-weight: bold; color: #1976d2; }
+        .address { color: #666; }
+        .county { color: #d32f2f; font-weight: bold; }
+        input[type="file"] {
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 2px solid #1976d2;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #1976d2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover { background: #1565c0; }
+        .search-box {
+            margin: 15px 0;
+            padding: 10px;
+            width: 100%;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Colchester County Well Filtering Checker</h1>
+    
+    <div>
+        <input type="file" id="csvFile" accept=".csv">
+        <button onclick="processFile()">Analyze CSV</button>
+    </div>
+
+    <div id="stats" class="stats" style="display:none;">
+        <h3>Statistics</h3>
+        <div id="statsContent"></div>
+    </div>
+
+    <div class="container">
+        <div class="panel filtered">
+            <h2>✓ Filtered IN (Colchester)</h2>
+            <p>These wells PASSED the Colchester filter</p>
+            <input type="text" class="search-box" id="searchFiltered" placeholder="Search filtered wells...">
+            <div id="filteredList"></div>
+        </div>
+        
+        <div class="panel not-filtered">
+            <h2>✗ Filtered OUT (Non-Colchester)</h2>
+            <p>These wells were EXCLUDED from analysis</p>
+            <input type="text" class="search-box" id="searchNotFiltered" placeholder="Search excluded wells...">
+            <div id="notFilteredList"></div>
+        </div>
+    </div>
+
+    <script>
+        // Colchester places list (same as Python script)
+        const colchesterPlaces = new Set([
+            'municipality of the county of colchester', 'county of colchester', 'colchester county',
+            'town of truro', 'truro', 'town of stewiacke', 'stewiacke', 
+            'village of bible hill', 'bible hill', 'village of tatamagouche', 'tatamagouche',
+            'millbrook first nation', 'colchester subdivision a', 'colchester subdivision b', 
+            'colchester subdivision c', 'alton', 'brentwood', 'brookfield', 'hilden', 'onslow', 
+            'masstown', 'glenholme', 'little dyke', 'great village', 'highland village', 
+            'portapique', 'five houses', 'bass river', 'upper economy', 'cove road', 
+            'economy', 'carrs brook', 'lower economy', 'five islands', 'folly lake',
+            'kemptown', 'bayhead', 'brule', 'gays river', 'green oaks', 'beaver brook',
+            'old barns', 'truro heights', 'oliver', 'west new annan', 'central new annan',
+            'the falls', 'balmoral mills', 'east earltown', 'green creek', 'eastville',
+            'north river', 'nuttby', 'earltown', 'denmark', 'newton mills',
+            'upper onslow', 'onslow mountain', 'mccallum settlement', 'upper north river',
+            'central north river', 'upper brookside', 'upper kemptown', 'riversdale',
+            'acadian mines', 'belmont', 'black rock', 'burnside', 'camden', 'castlereagh',
+            'cloverdale', 'coldstream', 'debert', 'east mines station', 'east stewiacke',
+            'east village', 'french river', 'greenfield', 'harmony', 'lanesville',
+            'londonderry', 'lornevale', 'lynn', 'montrose', 'pleasant hills', 'princeport',
+            'salmon river', 'sand point', 'south branch', 'union', 'valley', 
+            'west st. andrews', 'wittenburg'
+        ]);
+
+        let allWells = [];
+        let filteredWells = [];
+        let notFilteredWells = [];
+
+        function processFile() {
+            const fileInput = document.getElementById('csvFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a CSV file first');
+                return;
+            }
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    allWells = results.data;
+                    filterWells();
+                    displayResults();
+                }
+            });
+        }
+
+        function filterWells() {
+            filteredWells = [];
+            notFilteredWells = [];
+
+            allWells.forEach(well => {
+                const county = (well.countyl || '').toLowerCase();
+                const municipality = (well.nearestcommunity || '').toLowerCase();
+                const address = (well.civicaddress || '').toLowerCase();
+                
+                let isColchester = false;
+                
+                // Check county
+                if (county.includes('colchester')) {
+                    isColchester = true;
+                }
+                
+                // Check municipality/community
+                if (!isColchester) {
+                    for (let place of colchesterPlaces) {
+                        if (municipality.includes(place) || address.includes(place)) {
+                            isColchester = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (isColchester) {
+                    filteredWells.push(well);
+                } else {
+                    notFilteredWells.push(well);
+                }
+            });
+        }
+
+        function displayResults() {
+            // Update stats
+            document.getElementById('stats').style.display = 'block';
+            document.getElementById('statsContent').innerHTML = `
+                <strong>Total Wells:</strong> ${allWells.length}<br>
+                <strong>Filtered IN (Colchester):</strong> ${filteredWells.length} (${(filteredWells.length/allWells.length*100).toFixed(1)}%)<br>
+                <strong>Filtered OUT:</strong> ${notFilteredWells.length} (${(notFilteredWells.length/allWells.length*100).toFixed(1)}%)
+            `;
+
+            // Display filtered wells
+            displayWellList(filteredWells, 'filteredList');
+            displayWellList(notFilteredWells, 'notFilteredList');
+
+            // Add search functionality
+            document.getElementById('searchFiltered').addEventListener('input', (e) => {
+                displayWellList(filteredWells, 'filteredList', e.target.value);
+            });
+            document.getElementById('searchNotFiltered').addEventListener('input', (e) => {
+                displayWellList(notFilteredWells, 'notFilteredList', e.target.value);
+            });
+        }
+
+        function displayWellList(wells, elementId, searchTerm = '') {
+            const element = document.getElementById(elementId);
+            
+            let filteredList = wells;
+            if (searchTerm) {
+                const term = searchTerm.toLowerCase();
+                filteredList = wells.filter(w => 
+                    (w.wellnumber || '').toString().includes(term) ||
+                    (w.civicaddress || '').toLowerCase().includes(term) ||
+                    (w.nearestcommunity || '').toLowerCase().includes(term) ||
+                    (w.countyl || '').toLowerCase().includes(term)
+                );
+            }
+
+            element.innerHTML = filteredList.slice(0, 500).map(well => `
+                <div class="well-item">
+                    <span class="well-id">Well #${well.wellnumber || 'Unknown'}</span><br>
+                    <span class="address">${well.civicaddress || 'No address'}</span><br>
+                    <span>Community: ${well.nearestcommunity || 'Unknown'}</span><br>
+                    <span class="county">County: ${well.countyl || 'Not specified'}</span>
+                </div>
+            `).join('') + (filteredList.length > 500 ? `<p><em>Showing first 500 of ${filteredList.length} wells</em></p>` : '');
+        }
+    </script>
+</body>
+</html>
