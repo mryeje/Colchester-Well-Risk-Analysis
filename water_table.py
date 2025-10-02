@@ -1135,12 +1135,11 @@ buffer_stats = wells["buffer_m"].describe()
 print(f"\nBuffer statistics (meters after drought stress):")
 print(buffer_stats)
 
-# Export CSV (include useful columns)
 # Export CSV (include useful columns with proper units)
 out_cols = ["WELL_ID", "CIVIC_ADDRESS", "MUNICIPALITY", "location_display", "google_maps_link", 
-            "latitude", "longitude", "DEPTH", "DEPTH_M", "STATIC_WATER_LEVEL",
+            "latitude", "longitude", "DEPTH_M", "STATIC_WATER_LEVEL",
             "current_water_level_m_observed", "drought_drawdown_m", "stressed_water_level_m",
-            "pump_depth_m", "buffer_m", "drying_risk", "YIELD", "YIELD_LMIN", "yield_category", "aquifer_type"]
+            "pump_depth_m", "buffer_m", "drying_risk", "YIELD_LMIN", "yield_category", "aquifer_type"]
 # only keep existing
 out_cols = [c for c in out_cols if c in wells.columns]
 results = wells[out_cols].sort_values("buffer_m", ascending=True)
@@ -2128,146 +2127,122 @@ html_parts.append("""
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-<style><style>
-body {{ background:#f8fafc; color:#111; }}
-h1,h2 {{ color:#0b4d78; margin-top:20px; }}
-.card {{ border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,0.08); margin-bottom:20px; }}
-.kpi-card {{ text-align:center; padding:20px; }}
-.kpi-value {{ font-size:1.5rem; font-weight:bold; color:#0b4d78; }}
-.drought-status {{ padding:10px; border-radius:5px; margin-bottom:20px; }}
-.drought-severe {{ background-color:#ffebee; border-left:4px solid #f44336; }}
-.drought-moderate {{ background-color:#fff3e0; border-left:4px solid #ff9800; }}
-.drought-normal {{ background-color:#e8f5e8; border-left:4px solid #4caf50; }}
-.drought-default {{ background-color:#f5f5f5; border-left:4px solid #9e9e9e; }}
-.nav-tabs .nav-link.active {{ background:#0b4d78; color:#fff; }}
-.map-link {{ color:#0b4d78; text-decoration:none; }}
-.map-link:hover {{ text-decoration:underline; }}
-.dataTables_wrapper .dt-buttons {{ margin-bottom:10px; }}
-table.dataTable thead th {{ white-space: nowrap; }}
 
-.well-link {{
-    color: #0b4d78;
-    text-decoration: none;
-    font-weight: 500;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}}
-
-.well-link:hover {{
-    color: #1976d2;
-    text-decoration: underline;
-}}
-
-table.dataTable td .well-link {{
-    padding: 2px 4px;
-    border-radius: 3px;
+<style>
+body { 
+    background: linear-gradient(135deg, #f5f7fa 0%, #e8f0f7 100%); 
+    color:#111; 
+    min-height: 100vh; 
+}
+h1,h2 { 
+    color:#0b4d78; 
+    margin-top:20px; 
+    text-shadow: 0 1px 2px rgba(0,0,0,0.05); 
+}
+.card { 
+    border-radius:12px; 
+    box-shadow:0 2px 8px rgba(11,77,120,0.12); 
+    margin-bottom:20px;
+    background: white;
+    border: 1px solid rgba(11,77,120,0.08);
+}
+.kpi-card { 
+    text-align:center; 
+    padding:25px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbfd 100%);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow:0 4px 12px rgba(11,77,120,0.18);
+}
+.kpi-value { font-size:1.8rem; font-weight:bold; color:#0b4d78; }
+.drought-status { padding:15px; border-radius:8px; margin-bottom:20px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+.drought-severe { background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); border-left:5px solid #f44336; }
+.drought-moderate { background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%); border-left:5px solid #ff9800; }
+.drought-normal { background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); border-left:5px solid #4caf50; }
+.drought-default { background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%); border-left:5px solid #9e9e9e; }
+.nav-tabs { border-bottom: 2px solid #0b4d78; }
+.nav-tabs .nav-link { 
+    color:#0b4d78; 
+    border: none;
     transition: all 0.2s ease;
-}}
+}
+.nav-tabs .nav-link:hover { background: rgba(11,77,120,0.08); }
+.nav-tabs .nav-link.active { 
+    background: linear-gradient(135deg, #0b4d78 0%, #0a5a8a 100%); 
+    color:#fff;
+    border-radius: 8px 8px 0 0;
+}
+.map-link { color:#0b4d78; text-decoration:none; font-weight: 500; }
+.map-link:hover { color:#1976d2; text-decoration:underline; }
+.dataTables_wrapper .dt-buttons { margin-bottom:15px; }
+.dataTables_wrapper .dt-buttons .btn {
+    background: linear-gradient(135deg, #0b4d78 0%, #0a5a8a 100%);
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    margin-right: 8px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+.dataTables_wrapper .dt-buttons .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(11,77,120,0.3);
+}
+table.dataTable thead th { 
+    white-space: nowrap;
+    background: linear-gradient(135deg, #0b4d78 0%, #0a5a8a 100%);
+    color: white;
+}
+table.dataTable tbody tr:hover {
+    background-color: rgba(11,77,120,0.05);
+}
 
-table.dataTable td .well-link:hover {{
-    background-color: rgba(11, 77, 120, 0.1);
-}}
+/* ENHANCED SEARCH BOX */
+.dataTables_wrapper .dataTables_filter {
+    float: none !important;
+    text-align: center !important;
+    margin: 20px 0 25px 0 !important;
+}
 
-/* Map Modal Styles - FIXED */
-#mapModal .modal-dialog {{ 
-    max-width: 95vw;
-    margin: 1.75rem auto;
-}}
+.dataTables_wrapper .dataTables_filter label {
+    display: block !important;
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+    color: #0b4d78 !important;
+    margin-bottom: 10px !important;
+}
 
-#mapModal .modal-content {{ 
-    height: 85vh;
-}}
-
-#mapModal .modal-body {{ 
-    padding: 0; 
-    height: calc(100% - 60px);
-    position: relative;
-}}
-
-#wellMap {{ 
-    height: 100% !important; 
+.dataTables_wrapper .dataTables_filter input {
     width: 100% !important;
-    min-height: 400px;
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-}}
+    max-width: 500px !important;
+    padding: 14px 20px !important;
+    font-size: 16px !important;
+    border: 3px solid #0b4d78 !important;
+    border-radius: 10px !important;
+    background: white !important;
+    box-shadow: 0 4px 12px rgba(11,77,120,0.15) !important;
+    transition: all 0.3s ease !important;
+    margin: 0 auto !important;
+    display: block !important;
+}
 
-/* Mobile optimizations */
-@media (max-width: 768px) {{
-    .map-controls {{ 
-        position: relative; 
-        margin-bottom: 10px; 
-    }}
-    .map-legend {{
-        position: relative;
-        margin-top: 10px;
-    }}
-    #wellMap {{ 
-        height: 70vh !important;
-        min-height: 400px;
-    }}
-    
-    /* Make DataTables search larger and more centered on mobile */
-    .dataTables_wrapper .dataTables_filter {{
-        text-align: center !important;
-        float: none !important;
-        margin: 15px 0 !important;
-    }}
-    
-    .dataTables_wrapper .dataTables_filter input {{
-        width: 100% !important;
-        max-width: 400px !important;
-        margin: 10px auto !important;
-        padding: 12px 15px !important;
-        font-size: 16px !important;
-        border: 2px solid #0b4d78 !important;
-        border-radius: 8px !important;
-        display: block !important;
-    }}
-    
-    .dataTables_wrapper .dataTables_filter label {{
-        display: block !important;
-        width: 100% !important;
-        font-size: 14px !important;
-        font-weight: 600 !important;
-        margin-bottom: 5px !important;
-    }}
-    
-    /* Center and stack DataTables controls on mobile */
-    .dataTables_wrapper .dataTables_length {{
-        text-align: center !important;
-        float: none !important;
-        margin: 10px 0 !important;
-    }}
-    
-    .dataTables_wrapper .dataTables_info {{
-        text-align: center !important;
-        float: none !important;
-        padding-top: 10px !important;
-    }}
-    
-    .dataTables_wrapper .dataTables_paginate {{
-        text-align: center !important;
-        float: none !important;
-        margin-top: 10px !important;
-    }}
-    
-    /* Make buttons stack nicely on mobile */
-    .dataTables_wrapper .dt-buttons {{
-        text-align: center !important;
-        margin: 10px 0 !important;
-    }}
-    
-    .dataTables_wrapper .dt-buttons .btn {{
-        margin: 3px !important;
-        font-size: 14px !important;
-    }}
-}}
+.dataTables_wrapper .dataTables_filter input:focus {
+    outline: none !important;
+    border-color: #1976d2 !important;
+    box-shadow: 0 6px 16px rgba(11,77,120,0.25) !important;
+    transform: translateY(-2px) !important;
+}
+
+.dataTables_wrapper .dataTables_filter input::placeholder {
+    color: #999 !important;
+    font-style: italic !important;
+}
+
+table.dataTable thead th { white-space: nowrap; }
 </style>
+
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
