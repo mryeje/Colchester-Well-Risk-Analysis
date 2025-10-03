@@ -2216,17 +2216,18 @@ table.dataTable tbody tr:hover {
 
 .dataTables_wrapper .dataTables_filter input {
     width: 100% !important;
-    max-width: 500px !important;
-    padding: 14px 20px !important;
-    font-size: 16px !important;
-    border: 3px solid #0b4d78 !important;
-    border-radius: 10px !important;
+    max-width: 400px !important;
+    padding: 8px 12px !important;  /* smaller, cleaner */
+    font-size: 15px !important;
+    border: 2px solid #0b4d78 !important;
+    border-radius: 8px !important;
     background: white !important;
-    box-shadow: 0 4px 12px rgba(11,77,120,0.15) !important;
-    transition: all 0.3s ease !important;
+    box-shadow: 0 2px 6px rgba(11,77,120,0.15) !important;
+    transition: all 0.2s ease !important;
     margin: 0 auto !important;
     display: block !important;
 }
+
 
 .dataTables_wrapper .dataTables_filter input:focus {
     outline: none !important;
@@ -2242,6 +2243,8 @@ table.dataTable tbody tr:hover {
 
 table.dataTable thead th { white-space: nowrap; }
 </style>
+
+
 
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -2474,17 +2477,22 @@ $(document).ready(function() {
         // STORE ORIGINAL DATA BEFORE ANY MODIFICATIONS
         originalMetricData = JSON.parse(JSON.stringify(allWellsData));
         
-        currentTable = $('#all_wells_table').DataTable({
-            data: allWellsData,
-            columns: dtColumns,
-            pageLength: 25,
-            lengthMenu: [10, 25, 50, 100, {label: "All", value: -1}],
-            dom: 'Bfrtip',
-            buttons: ['copy', 'csv', 'excel', 'print'],
-            scrollX: true,
-            responsive: true,
-            order: [[findColumnIndex('buffer_m'), 'asc']]
-        });
+    currentTable = $('#all_wells_table').DataTable({
+        data: allWellsData,
+        columns: dtColumns,
+        pageLength: 25,
+        lengthMenu: [10, 25, 50, 100, {label: "All", value: -1}],
+        dom: '<"top d-flex justify-content-between align-items-center"Bf>rtip',
+        buttons: ['copy', 'csv', 'excel', 'print'],
+        scrollX: true,
+        responsive: true,
+        order: [[findColumnIndex('buffer_m'), 'asc']],
+        language: {
+            search: "",
+            searchPlaceholder: "Search Wells..."
+        }
+    });
+
         
         $('#all_wells_table tbody').on('click', 'tr', function() {
             if ($(this).hasClass('selected')) {
