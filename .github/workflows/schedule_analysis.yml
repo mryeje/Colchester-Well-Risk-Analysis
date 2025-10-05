@@ -28,7 +28,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas numpy geopandas requests openpyxl shapely pyproj
+          pip install pandas numpy geopandas requests openpyxl shapely pyproj fiona rtree
           
       - name: Verify Required Files
         run: |
