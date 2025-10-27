@@ -64,7 +64,7 @@ BACKUP_STATIONS = {
     "01EG001": "French River near French River"    # Backup central
 }
 
-WSC_API_URL = "https://dd.weather.gc.ca/hydrometric/csv/NS/daily/NS_daily_hydrometric.csv"
+WSC_API_URL = "https://dd.weather.gc.ca/today/hydrometric/csv/NS/hourly/NS_hourly_hydrometric.csv"
 
 # ---------------------------
 # 1. Load well logs (try a few filenames)
